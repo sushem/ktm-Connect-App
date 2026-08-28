@@ -75,8 +75,14 @@ npm run lint
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `.github/workflows/ci.yml` | every push to `main` and every pull request | typecheck, lint, tests, then `assembleDebug` — which is what proves the native module and its codegen spec still agree |
+| `.github/workflows/ci.yml` | every push to `main` and every pull request | typecheck, lint, tests, then `assembleDebug` — which is what proves the native module and its codegen spec still agree — and uploads the resulting debug APK as a build artifact (kept 14 days) |
 | `.github/workflows/build-apk.yml` | manual (**Actions → Build APK → Run workflow**) | builds a debug APK, a release APK or both, uploads them as artifacts, and publishes a GitHub release |
+
+To install a build from a pull request, open its CI run and download
+**KtmConnect-debug-apk** from the Artifacts section at the bottom of the summary
+page. GitHub only shows the **Run workflow** button for `build-apk.yml` once
+that file is on the default branch, so releases can only be cut after this is
+merged.
 
 Both release and debug APKs are signed with React Native's debug keystore, so
 they install and run but are not fit to publish. Generate a real keystore and
