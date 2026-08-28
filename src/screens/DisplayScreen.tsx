@@ -7,7 +7,7 @@ import {OptionRow} from '../components/OptionRow';
 import {Screen} from '../components/Screen';
 import {StatusPill} from '../components/StatusPill';
 import {Toggle} from '../components/Toggle';
-import {guidanceView, notificationView, TURN_ICONS, type TurnIcon} from '../protocol/ktm/messages';
+import {guidanceView, TURN_ICONS, type TurnIcon} from '../protocol/ktm/messages';
 import {bikeService} from '../services/BikeService';
 import {useSession} from '../state/sessionStore';
 import {useSettings} from '../state/settingsStore';
@@ -23,7 +23,6 @@ export function DisplayScreen() {
   const mirror = useSettings(state => state.mirrorTelemetryToDashboard);
   const updateSettings = useSettings(state => state.update);
 
-  const [message, setMessage] = useState('Ready to ride');
   const [road, setRoad] = useState('Grossglockner Road');
   const [turnMetres, setTurnMetres] = useState('350');
   const [remainingKm, setRemainingKm] = useState('42');
@@ -47,7 +46,7 @@ export function DisplayScreen() {
 
   return (
     <Screen
-      title="Display"
+      title="Navigation"
       subtitle={link.deviceName ?? 'Dashboard not connected'}
       accessory={<StatusPill status={link.status} />}>
       {!connected ? (
@@ -79,23 +78,6 @@ export function DisplayScreen() {
           </Text>
           <Text style={styles.previewMuted}>{view.notificationText ?? ''}</Text>
         </View>
-      </Card>
-
-      <Card title="Message">
-        <TextInput
-          value={message}
-          onChangeText={setMessage}
-          placeholder="Text to put on the dashboard"
-          placeholderTextColor={colors.textMuted}
-          style={styles.input}
-          maxLength={64}
-        />
-        <Button
-          label="Send message"
-          disabled={!connected || message.trim().length === 0}
-          busy={busy}
-          onPress={() => void send(() => bikeService.showOnDashboard(notificationView(message.trim())))}
-        />
       </Card>
 
       <Card

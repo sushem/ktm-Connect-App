@@ -105,6 +105,19 @@ class BikeService {
     useSession.getState().setDashboardView(view);
   }
 
+  /**
+   * Put a line of text on the bike's screen and keep it in the recent list.
+   * The display holds it until something replaces it or the screen is restored.
+   */
+  async sendMessage(text: string): Promise<void> {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) {
+      throw new Error('There is nothing to send');
+    }
+    await this.showOnDashboard(notificationView(trimmed));
+    useSession.getState().rememberMessage(trimmed);
+  }
+
   async restoreDashboard(): Promise<void> {
     await this.showOnDashboard(restoreView());
   }

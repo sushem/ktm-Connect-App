@@ -21,7 +21,8 @@ community reverse engineering, not a published specification — see
 |---|---|
 | **Ride** | Tachometer with the speed and gear in the middle, tiles for the rest, and running distance / top speed / peak rpm for the session |
 | **Connect** | Scan and connect each link independently; demo mode lives here too |
-| **Display** | Send a message or a turn instruction to the bike, mirror live data, hand the screen back |
+| **Message** | Type a line, hit send, and it appears on the bike's TFT screen — with quick presets, a list of what you sent before, and one tap to hand the screen back |
+| **Nav** | Turn-by-turn instructions on the bike's display, and mirroring of live speed and gear |
 | **Codes** | Read stored trouble codes, and watch the raw conversation on both links |
 | **Setup** | Units, gearing profile for the gear estimate, poll rate |
 
@@ -65,14 +66,24 @@ by model and year.
 ## Checks
 
 ```bash
-npm test          # 75 unit and integration tests
+npm test          # 82 unit and integration tests
 npm run typecheck
 npm run lint
 ```
 
-The JavaScript side is verified here. The Android native module and the iOS
-project have **not** been compiled in this environment — no Android SDK or Xcode
-— so treat the first `npm run android` / `npm run ios` as the real build check.
+## CI
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `.github/workflows/ci.yml` | every push to `main` and every pull request | typecheck, lint, tests, then `assembleDebug` — which is what proves the native module and its codegen spec still agree |
+| `.github/workflows/build-apk.yml` | manual (**Actions → Build APK → Run workflow**) | builds a debug APK, a release APK or both, uploads them as artifacts, and publishes a GitHub release |
+
+Both release and debug APKs are signed with React Native's debug keystore, so
+they install and run but are not fit to publish. Generate a real keystore and
+wire it into `android/app/build.gradle` before distributing anything.
+
+There is no iOS workflow yet — that comes once the Android side has proven
+itself, since a macOS runner costs about ten times as much per minute.
 
 ## How it is put together
 

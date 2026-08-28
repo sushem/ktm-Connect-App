@@ -12,6 +12,7 @@ import type {DashboardView} from '../protocol/ktm/messages';
 import {restoreView} from '../protocol/ktm/messages';
 
 const MAX_LOG_LINES = 200;
+const MAX_RECENT_MESSAGES = 8;
 
 export interface LogLine {
   at: number;
@@ -26,6 +27,8 @@ interface SessionState {
   trip: TripStats | null;
   codes: DiagnosticCode[];
   dashboardView: DashboardView;
+  /** Messages the rider has put on the bike's screen, newest first. */
+  sentMessages: string[];
   log: LogLine[];
 
   setLink: (link: LinkId, state: Partial<LinkState>) => void;
@@ -35,6 +38,7 @@ interface SessionState {
   resetTelemetry: () => void;
   setCodes: (codes: DiagnosticCode[]) => void;
   setDashboardView: (view: DashboardView) => void;
+  rememberMessage: (text: string) => void;
   appendLog: (source: LinkId | 'app', text: string) => void;
   clearLog: () => void;
   startTrip: () => void;
@@ -50,6 +54,7 @@ export const useSession = create<SessionState>((set, get) => ({
   trip: null,
   codes: [],
   dashboardView: restoreView(),
+  sentMessages: [],
   log: [],
 
   setLink: (link, state) =>
@@ -84,6 +89,16 @@ export const useSession = create<SessionState>((set, get) => ({
   resetTelemetry: () => set({telemetry: {}}),
 
   setCodes: codes => set({codes}),
+
+  rememberMessage: text =>
+    set(current => ({
+      // Re-sending an old message moves it back to the top rather than
+      // filling the list with duplicates.
+      sentMessages: [text, ...current.sentMessages.filter(m => m !== text)].slice(
+        0,
+        MAX_RECENT_MESSAGES,
+      ),
+    })),
 
   setDashboardView: view => set({dashboardView: view}),
 

@@ -5,6 +5,7 @@ const reset = () =>
     telemetry: {},
     trip: null,
     devices: {telemetry: [], dashboard: []},
+    sentMessages: [],
     log: [],
   });
 
@@ -51,6 +52,17 @@ describe('session store', () => {
 
     const devices = useSession.getState().devices.telemetry;
     expect(devices.map(d => d.id)).toEqual(['b', 'a']);
+  });
+
+  it('keeps only the last few messages the rider sent', () => {
+    const store = useSession.getState();
+    for (let i = 0; i < 12; i++) {
+      store.rememberMessage(`message ${i}`);
+    }
+    const messages = useSession.getState().sentMessages;
+    expect(messages).toHaveLength(8);
+    expect(messages[0]).toBe('message 11');
+    expect(messages).not.toContain('message 0');
   });
 
   it('caps the log so a long ride cannot grow it without bound', () => {

@@ -5,18 +5,20 @@ import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-contex
 import {ConnectScreen} from './src/screens/ConnectScreen';
 import {DiagnosticsScreen} from './src/screens/DiagnosticsScreen';
 import {DisplayScreen} from './src/screens/DisplayScreen';
+import {MessageScreen} from './src/screens/MessageScreen';
 import {RideScreen} from './src/screens/RideScreen';
 import {SettingsScreen} from './src/screens/SettingsScreen';
 import {useSession} from './src/state/sessionStore';
 import {useSettings} from './src/state/settingsStore';
 import {colors, spacing, typography} from './src/theme';
 
-type TabId = 'ride' | 'connect' | 'display' | 'diagnostics' | 'settings';
+type TabId = 'ride' | 'connect' | 'message' | 'display' | 'diagnostics' | 'settings';
 
 const TABS: Array<{id: TabId; label: string; render: () => React.ReactElement}> = [
   {id: 'ride', label: 'Ride', render: () => <RideScreen />},
   {id: 'connect', label: 'Connect', render: () => <ConnectScreen />},
-  {id: 'display', label: 'Display', render: () => <DisplayScreen />},
+  {id: 'message', label: 'Message', render: () => <MessageScreen />},
+  {id: 'display', label: 'Nav', render: () => <DisplayScreen />},
   {id: 'diagnostics', label: 'Codes', render: () => <DiagnosticsScreen />},
   {id: 'settings', label: 'Setup', render: () => <SettingsScreen />},
 ];
@@ -43,7 +45,8 @@ function Shell() {
           // A dot on the tab that owns a live link saves a trip to Connect.
           const live =
             (entry.id === 'ride' && links.telemetry.status === 'connected') ||
-            (entry.id === 'display' && links.dashboard.status === 'connected');
+            ((entry.id === 'display' || entry.id === 'message') &&
+              links.dashboard.status === 'connected');
           return (
             <Pressable
               key={entry.id}
