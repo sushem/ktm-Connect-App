@@ -7,9 +7,10 @@ import {useSettings} from '../../state/settingsStore';
  * BikeService → the framing → the transport, and the "bike" reports back what
  * it was asked to draw.
  */
-describe('sending a message to the bike', () => {
+// The older Bluetooth Classic dashboards. Gen-3 is covered in Gen3Dashboard.test.
+describe('sending a message to the bike (legacy serial dashboard)', () => {
   beforeEach(async () => {
-    useSettings.setState({demoMode: true});
+    useSettings.setState({demoMode: true, dashboardProtocol: 'legacy'});
     useSession.setState({sentMessages: [], log: []});
     await bikeService.connect('dashboard', 'demo-dashboard');
   });
@@ -77,7 +78,7 @@ describe('sending a message to the bike', () => {
 
 describe('inspecting what a dashboard offers', () => {
   beforeEach(() => {
-    useSettings.setState({demoMode: true});
+    useSettings.setState({demoMode: true, dashboardProtocol: 'legacy'});
     useSession.setState({log: []});
   });
 
@@ -101,7 +102,7 @@ describe('choosing a service to connect over', () => {
   const HANDSFREE = '0000111e-0000-1000-8000-00805f9b34fb';
 
   beforeEach(() => {
-    useSettings.setState({demoMode: true});
+    useSettings.setState({demoMode: true, dashboardProtocol: 'legacy'});
     useSession.setState({log: [], devices: {telemetry: [], dashboard: []}});
   });
 

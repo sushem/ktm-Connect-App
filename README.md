@@ -6,14 +6,20 @@ A React Native app for KTM motorcycles that does two things:
   estimated gear, coolant / oil / intake temperatures, throttle, load, battery
   voltage, fuel level and stored trouble codes, through a Bluetooth LE OBD-II
   adapter on the bike's diagnostic port. Android and iOS.
-- **Writes to the bike's TFT display.** Messages and turn-by-turn guidance over
-  the MY RIDE Bluetooth Classic link, plus an option to mirror speed and gear
-  onto the dash while riding. Android only — [iOS does not let third-party apps
-  open a Bluetooth Classic serial port](docs/KTM-PROTOCOL.md#why-the-display-link-is-android-only).
+- **Writes to the bike's TFT display.** Messages and turn-by-turn guidance, plus
+  an option to mirror speed and gear onto the dash while riding. Two protocols,
+  picked on the Setup tab:
+  - **Gen-3** (roughly 2020 on, including the 390 Adventure) — encrypted BLE.
+    Works on Android and iOS.
+  - **Older MY RIDE** — a Bluetooth Classic serial link, [Android
+    only](docs/KTM-PROTOCOL.md#why-the-older-display-link-is-android-only).
 
-Not affiliated with or endorsed by KTM. The display protocol comes from
-community reverse engineering, not a published specification — see
-[docs/KTM-PROTOCOL.md](docs/KTM-PROTOCOL.md).
+Not affiliated with or endorsed by KTM. Neither display protocol is published
+by KTM; both come from community reverse engineering — see
+[docs/KTM-PROTOCOL.md](docs/KTM-PROTOCOL.md). The Gen-3 GATT layout, payload
+shapes and crypto are taken from the
+[Navigator Gen3](https://github.com/Pavanayi1/KTM-Nav-GEN3) project (MIT), with
+thanks.
 
 ## Screens
 
@@ -66,7 +72,7 @@ by model and year.
 ## Checks
 
 ```bash
-npm test          # 82 unit and integration tests
+npm test          # 140 unit and integration tests
 npm run typecheck
 npm run lint
 ```
@@ -109,7 +115,8 @@ android/…/ktmlink/            its Kotlin implementation (socket + reader threa
 src/
   transport/                  Transport interface, BLE, MY RIDE, demo
   protocol/obd/               ELM327 conversation, PID table, poll loop
-  protocol/ktm/               MY RIDE framing and message bodies
+  protocol/bccu/              Gen-3: GATT map, crypto, payloads, handshake
+  protocol/ktm/               older MY RIDE framing and message bodies
   services/BikeService.ts     owns the radios, keeps the stores in step
   state/                      zustand stores (session, settings)
   screens/, components/       the UI

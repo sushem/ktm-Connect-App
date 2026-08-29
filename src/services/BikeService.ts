@@ -2,6 +2,7 @@ import type {LinkId, Telemetry} from '../core/types';
 import type {BluetoothService} from '../protocol/ktm/services';
 import {connectionCandidates, describeService, describeServices} from '../protocol/ktm/services';
 import {KtmDashboardClient} from '../protocol/ktm/KtmDashboardClient';
+import {Gen3Dashboard} from './Gen3Dashboard';
 import type {DashboardView} from '../protocol/ktm/messages';
 import {notificationView, restoreView} from '../protocol/ktm/messages';
 import {ObdClient} from '../protocol/obd/ObdClient';
@@ -22,12 +23,40 @@ class BikeService {
   private transports: Partial<Record<LinkId, Transport>> = {};
   private obd: ObdClient | null = null;
   private dashboard: KtmDashboardClient | null = null;
+  private gen3: Gen3Dashboard | null = null;
   private demoBacking: 'demo' | 'real' | null = null;
+  private gen3Demo: boolean | null = null;
   private mirrorTimer: ReturnType<typeof setInterval> | null = null;
 
-  /** Whether the dashboard link can work on this device at all. */
+  /**
+   * Whether the dashboard link can work here. The Gen-3 protocol is BLE, so it
+   * runs on both platforms; the older serial one is Android-only.
+   */
   dashboardSupported(): boolean {
+    if (useSettings.getState().dashboardProtocol === 'gen3') {
+      return true;
+    }
     return this.transportFor('dashboard').isSupported();
+  }
+
+  private get useGen3(): boolean {
+    return useSettings.getState().dashboardProtocol === 'gen3';
+  }
+
+  /** The Gen-3 link, created on demand and rebuilt when demo mode changes. */
+  private gen3Dashboard(): Gen3Dashboard {
+    const demo = useSettings.getState().demoMode;
+    if (this.gen3 && this.gen3Demo === demo) {
+      return this.gen3;
+    }
+    void this.gen3?.disconnect();
+    this.gen3Demo = demo;
+    this.gen3 = new Gen3Dashboard({
+      demo,
+      onLog: line => useSession.getState().appendLog('dashboard', line),
+      onDisconnect: reason => this.handleDrop('dashboard', reason),
+    });
+    return this.gen3;
   }
 
   async scan(link: LinkId): Promise<void> {
@@ -37,7 +66,11 @@ class BikeService {
     session.setDevices(link, []);
     session.setLink(link, {status: 'scanning', message: undefined});
     try {
-      await transport.scan(device => session.addDevice(link, device));
+      if (link === 'dashboard' && this.useGen3) {
+        await this.gen3Dashboard().scan(device => session.addDevice(link, device));
+      } else {
+        await transport.scan(device => session.addDevice(link, device));
+      }
       const found = useSession.getState().devices[link].length;
       session.setLink(link, {
         status: 'idle',
@@ -81,19 +114,22 @@ class BikeService {
 
     try {
       let over: string | undefined;
-      if (link === 'dashboard') {
+      if (link === 'dashboard' && this.useGen3) {
+        await this.gen3Dashboard().connect(deviceId);
+        over = 'Gen-3 (BLE)';
+        session.setDashboardView(this.gen3Dashboard().currentView);
+        this.syncMirroring();
+        settings.update({lastDashboardDeviceId: deviceId});
+      } else if (link === 'dashboard') {
         over = await this.openDashboard(transport, deviceId, serviceUuid);
-      } else {
-        await transport.connect(deviceId);
-      }
-      transport.onDisconnect(reason => this.handleDrop(link, reason));
-
-      if (link === 'telemetry') {
-        await this.startTelemetry();
-        settings.update({lastObdDeviceId: deviceId});
-      } else {
+        transport.onDisconnect(reason => this.handleDrop(link, reason));
         await this.startDashboard();
         settings.update({lastDashboardDeviceId: deviceId});
+      } else {
+        await transport.connect(deviceId);
+        transport.onDisconnect(reason => this.handleDrop(link, reason));
+        await this.startTelemetry();
+        settings.update({lastObdDeviceId: deviceId});
       }
 
       session.setLink(link, {
@@ -105,7 +141,11 @@ class BikeService {
       });
     } catch (error) {
       session.setLink(link, {status: 'error', deviceId, message: describe(error)});
-      await transport.disconnect().catch(() => {});
+      if (link === 'dashboard' && this.useGen3) {
+        await this.gen3?.disconnect().catch(() => {});
+      } else {
+        await transport.disconnect().catch(() => {});
+      }
       throw error;
     }
   }
@@ -121,17 +161,23 @@ class BikeService {
       this.stopMirroring();
       this.dashboard?.close();
       this.dashboard = null;
+      await this.gen3?.disconnect().catch(() => {});
     }
-    await this.transportFor(link).disconnect().catch(() => {});
+    if (link === 'telemetry' || !this.useGen3) {
+      await this.transportFor(link).disconnect().catch(() => {});
+    }
     session.setLink(link, {status: 'idle', deviceId: undefined, deviceName: undefined, message: undefined});
   }
 
   /** Push a view to the bike's display and remember it in the store. */
   async showOnDashboard(view: DashboardView): Promise<void> {
-    if (!this.dashboard) {
+    if (this.useGen3) {
+      await this.gen3Dashboard().show(view);
+    } else if (this.dashboard) {
+      await this.dashboard.show(view);
+    } else {
       throw new Error('The dashboard link is not connected');
     }
-    await this.dashboard.show(view);
     useSession.getState().setDashboardView(view);
   }
 
@@ -144,11 +190,21 @@ class BikeService {
     if (trimmed.length === 0) {
       throw new Error('There is nothing to send');
     }
-    await this.showOnDashboard(notificationView(trimmed));
+    if (this.useGen3) {
+      await this.gen3Dashboard().showMessage(trimmed);
+      useSession.getState().setDashboardView(notificationView(trimmed));
+    } else {
+      await this.showOnDashboard(notificationView(trimmed));
+    }
     useSession.getState().rememberMessage(trimmed);
   }
 
   async restoreDashboard(): Promise<void> {
+    if (this.useGen3) {
+      await this.gen3Dashboard().restore();
+      useSession.getState().setDashboardView(restoreView());
+      return;
+    }
     await this.showOnDashboard(restoreView());
   }
 
@@ -268,14 +324,14 @@ class BikeService {
     // One update per second: enough to read at a glance, gentle on the link.
     this.mirrorTimer = setInterval(() => {
       const {telemetry} = useSession.getState();
-      if (!this.dashboard || telemetry.updatedAt == null) {
+      if (telemetry.updatedAt == null) {
         return;
       }
       const units = useSettings.getState().units;
       const speed = telemetry.speedKph ?? 0;
       const shown = units === 'metric' ? `${Math.round(speed)} km/h` : `${Math.round(speed * 0.621371)} mph`;
       const gear = telemetry.gear ? `  |  gear ${telemetry.gear}` : '';
-      void this.dashboard.show(notificationView(`${shown}${gear}`)).catch(() => {});
+      void this.showOnDashboard(notificationView(`${shown}${gear}`)).catch(() => {});
     }, 1000);
   }
 
@@ -294,6 +350,8 @@ class BikeService {
     } else {
       this.stopMirroring();
       this.dashboard = null;
+      this.gen3 = null;
+      this.gen3Demo = null;
     }
     session.setLink(link, {status: 'error', message: reason ?? 'Connection lost'});
     session.appendLog(link, reason ?? 'Connection lost');

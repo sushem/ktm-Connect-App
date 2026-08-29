@@ -11,7 +11,9 @@ import {colors, typography} from '../theme';
 
 export function ConnectScreen() {
   const demoMode = useSettings(state => state.demoMode);
+  const protocol = useSettings(state => state.dashboardProtocol);
   const update = useSettings(state => state.update);
+  const gen3 = protocol === 'gen3';
   const dashboardSupported = bikeService.dashboardSupported() || demoMode;
 
   return (
@@ -38,15 +40,19 @@ export function ConnectScreen() {
 
       <LinkCard
         link="dashboard"
-        title="Phone → bike  ·  MY RIDE"
-        scanLabel="List paired devices"
-        inspectable
-        description="The bike's TFT display. Pair the bike in your phone's Bluetooth settings first — it is not discoverable from here. MY RIDE is an optional extra on many models: tap a device to see whether yours offers it."
+        title={gen3 ? 'Phone → bike  ·  Gen-3 dashboard' : 'Phone → bike  ·  MY RIDE'}
+        scanLabel={gen3 ? 'Scan for the bike' : 'List paired devices'}
+        inspectable={!gen3}
+        description={
+          gen3
+            ? "The bike's TFT display over BLE. Turn the ignition on and scan — the first connection makes the dashboard ask you to confirm this phone, so accept it on the bike. After that it reconnects on its own."
+            : "The bike's TFT display. Pair the bike in your phone's Bluetooth settings first — it is not discoverable from here. MY RIDE is an optional extra on many models: tap a device to see whether yours offers it."
+        }
         unavailableReason={
           dashboardSupported
             ? undefined
             : Platform.OS === 'ios'
-              ? 'iOS reserves Bluetooth Classic serial ports for MFi-licensed accessories, so an app cannot open the MY RIDE link. Everything on the Ride tab still works; the Display tab needs an Android phone.'
+              ? 'The older MY RIDE link needs a Bluetooth Classic serial port, which iOS reserves for MFi accessories. If your bike is a 2020-on model, switch to the Gen-3 protocol on the Setup tab — that one works here.'
               : 'This build does not include the native MY RIDE module.'
         }
       />
@@ -62,14 +68,14 @@ export function ConnectScreen() {
           answers; anything it refuses is dropped from the poll loop.
         </Text>
         <Text style={styles.step}>
-          4. For the display link, pair the bike over Bluetooth in the phone's system settings, then
-          come back and list paired devices. Sitting on the bike's pairing screen is not enough —
-          the phone has to finish bonding, so the bike appears under paired devices.
+          {gen3
+            ? '4. For the display link, just turn the ignition on and scan — a Gen-3 dashboard is found over BLE with no system pairing. The bike asks you to confirm a new phone the first time; accept it on the dashboard and the app finishes the handshake.'
+            : "4. For the display link, pair the bike over Bluetooth in the phone's system settings, then come back and list paired devices. Sitting on the bike's pairing screen is not enough — the phone has to finish bonding."}
         </Text>
         <Text style={styles.step}>
-          5. If connecting fails, tap "What does this device offer?" under the device. KTM MY RIDE
-          is an optional feature on models like the 390 Adventure and has to be activated by a
-          dealer; without it the dashboard runs no service for this app to talk to.
+          {gen3
+            ? '5. Nothing found? Check the protocol on the Setup tab. Gen-3 covers the 2020-on bikes; an older dashboard needs the MY RIDE setting instead.'
+            : '5. If connecting fails, tap "What does this device offer?" under the device. MY RIDE is optional on models like the 390 Adventure and is activated by a dealer — but a 2020-on bike is more likely a Gen-3 dashboard, which is a different protocol entirely. Switch it on the Setup tab.'}
         </Text>
       </Card>
     </Screen>

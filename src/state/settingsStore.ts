@@ -19,6 +19,11 @@ export interface Settings {
   mirrorTelemetryToDashboard: boolean;
   /** Send the opening frames on connect. Off means listen without writing. */
   sendHandshake: boolean;
+  /**
+   * Which dashboard the bike has. Gen-3 (2020 on) speaks BLE; older MY RIDE
+   * dashboards use a Bluetooth Classic serial link.
+   */
+  dashboardProtocol: 'gen3' | 'legacy';
 }
 
 interface SettingsState extends Settings {
@@ -35,6 +40,7 @@ const DEFAULTS: Settings = {
   pollIntervalMs: 120,
   mirrorTelemetryToDashboard: false,
   sendHandshake: true,
+  dashboardProtocol: 'gen3',
 };
 
 /** Only the settings themselves are written to disk, never the actions. */
@@ -48,6 +54,7 @@ function persistable(state: SettingsState): Settings {
     lastDashboardDeviceId: state.lastDashboardDeviceId,
     mirrorTelemetryToDashboard: state.mirrorTelemetryToDashboard,
     sendHandshake: state.sendHandshake,
+    dashboardProtocol: state.dashboardProtocol,
   };
 }
 

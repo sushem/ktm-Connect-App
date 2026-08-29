@@ -1,7 +1,8 @@
-import {BleManager, Device, Subscription, State} from 'react-native-ble-plx';
+import {Device, Subscription, State} from 'react-native-ble-plx';
 
 import type {DiscoveredDevice} from '../core/types';
 import {toBase64, fromBase64} from '../protocol/ktm/framing';
+import {bleManager, destroyBleManager} from './bleManager';
 import {requestBluetoothPermissions} from './permissions';
 import {TransportError, type Transport} from './types';
 
@@ -38,7 +39,7 @@ const WRITE_CHUNK = 20;
 export class BleTransport implements Transport {
   readonly id = 'ble';
 
-  private manager = new BleManager();
+  private manager = bleManager();
   private connected: Device | null = null;
   private profile: UartProfile | null = null;
   private notifySub: Subscription | null = null;
@@ -210,7 +211,7 @@ export class BleTransport implements Transport {
 
   /** Release the native manager. Only call this when tearing the app down. */
   destroy(): void {
-    this.manager.destroy();
+    destroyBleManager();
   }
 
   private emitDisconnect(reason?: string): void {

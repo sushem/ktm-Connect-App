@@ -1,5 +1,14 @@
 # The two links
 
+> **Correction, and where the dashboard link actually lives.** This document
+> originally described only the Bluetooth Classic MY RIDE serial link, and
+> concluded from a 390 Adventure's SDP record that a bike without that service
+> could not be driven at all. That was wrong. Bikes from roughly 2020 on carry a
+> **Gen-3 dashboard, which speaks a completely different protocol over BLE** —
+> see [Gen-3: the BCCU BLE protocol](#gen-3-the-bccu-ble-protocol) below. The
+> serial link covers the older dashboards only.
+
+
 The app speaks to the motorcycle over two unrelated Bluetooth links. They use
 different radios, different protocols, and have different platform support, so
 it is worth being precise about which is which.
@@ -7,13 +16,13 @@ it is worth being precise about which is which.
 | | Bike → phone | Phone → bike |
 |---|---|---|
 | What it carries | engine data (rpm, speed, temperatures…) | text and turn-by-turn drawn on the TFT display |
-| Radio | Bluetooth Low Energy | Bluetooth Classic (RFCOMM) |
-| Hardware needed | BLE OBD-II adapter on the diagnostic port | nothing beyond a bike with MY RIDE |
-| Protocol | ELM327 command set over a BLE UART, carrying OBD-II | KTM's own length-prefixed JSON |
+| Radio | Bluetooth Low Energy | BLE on Gen-3; Bluetooth Classic (RFCOMM) on older dashboards |
+| Hardware needed | BLE OBD-II adapter on the diagnostic port | nothing beyond the bike |
+| Protocol | ELM327 command set over a BLE UART, carrying OBD-II | Gen-3: encrypted BCCU over GATT. Older: KTM's length-prefixed JSON over RFCOMM |
 | Android | yes | yes |
-| iOS | yes | **no** — see below |
+| iOS | yes | Gen-3 yes; the older serial link **no** — see below |
 
-## Why the display link is Android-only
+## Why the older display link is Android-only
 
 Opening a Bluetooth Classic serial port on iOS requires the External Accessory
 framework, which only talks to accessories enrolled in Apple's MFi programme
@@ -22,9 +31,8 @@ an accessory, so no third-party iOS app can open the MY RIDE socket. Core
 Bluetooth, which iOS does expose, is BLE-only and the dashboard does not offer a
 BLE service.
 
-The telemetry side has no such problem: BLE OBD-II adapters are ordinary BLE
-peripherals, and the Ride, Diagnostics and Settings screens work identically on
-both platforms.
+Neither the telemetry side nor a Gen-3 dashboard has that problem: both are
+ordinary BLE, so on an iPhone everything works except the older serial link.
 
 ## Bike → phone: OBD-II over a BLE adapter
 
@@ -127,7 +135,86 @@ Two switches exist for probing further, both on the Setup tab:
 - The **Codes** tab logs every inbound chunk as hex and ASCII before parsing,
   so anything the dashboard volunteers shows up even if it is not our framing.
 
-## Phone → bike: the MY RIDE link
+
+## Gen-3: the BCCU BLE protocol
+
+Dashboards from around 2020 on — the 390 Adventure among them — expose a BLE
+GATT service instead of an RFCOMM one. This is what the KTMconnect app talks to,
+and it is the path this app uses by default.
+
+Everything below is implemented in `src/protocol/bccu/`. The UUIDs, payload
+shapes and crypto come from the
+[Navigator Gen3](https://github.com/Pavanayi1/KTM-Nav-GEN3) project (MIT), which
+documents them as confirmed byte-exact against two independent implementations
+of the same protocol.
+
+### GATT layout
+
+All under the base `71ced1ac-XXXX-44f5-9454-806ff70b3e02`:
+
+| Short | Characteristic | Purpose |
+|---|---|---|
+| `0700` | main service | everything below hangs off it |
+| `0701` | auth request | indications from the bike: nonce and handshake commands |
+| `0702` | auth reply | our half of the handshake |
+| `0703` | navigation state | `[flags][volume]`; bit 0 guidance, bit 1 GPS icon |
+| `0704` | turn icon | `[visibility][icon code]` |
+| `0705` | turn distance | `[visibility][text]`, 8 chars |
+| `0706` | turn info | 16 chars |
+| `0707` | turn road | 32 chars |
+| `0708` | ETA | 8 chars |
+| `0709` | remaining distance | 8 chars |
+| `070a` | notification | `[visibility][icon][text]`, 16 chars |
+
+Two things catch you out. **Visibility is not a boolean** — it is `1` off, `2`
+half, `3` full. And **the dashboard renders nothing until guidance is on**, so
+`0703` has to be written before any of the display fields do anything.
+
+### The handshake
+
+The bike drives it; the phone answers.
+
+1. On subscribing to `0701`, the bike sends a 16-byte nonce `m1` in the clear.
+2. We answer on `0702` with our own nonce `m2`. Both sides interleave the two
+   halves into a temporary IV and secret; every later control message is
+   AES-CBC under those.
+3. The bike sends `HELLO`. We echo it back — and only that. Whether the
+   dashboard shows its "confirm this device" prompt is its own decision, made
+   from its bond memory, so answering anything cleverer just stalls.
+4. **First pairing:** the bike sends `GENERATE_KEYS` carrying a challenge. Both
+   sides mirror its tail, concatenate the four cyclic rotations of
+   (challenge, mirrored, IV, secret), SHA-512 each one, and cut the digests into
+   **sixteen 16-byte session keys**.
+5. The bike names one by index, we acknowledge, and the session is up.
+
+**Reconnects skip steps 4 entirely.** The bike keeps the key pool across
+ignition cycles and simply names an index, so the phone has to have persisted
+its copy — otherwise every reconnect stalls with nothing to select from, and the
+rider gets asked to confirm the pairing all over again. We store it per device
+id (`src/state/keyStore.ts`).
+
+The command byte sits in **byte 2** of a message from the bike, but in **byte 4**
+of ours, which puts a `0xFF` marker in byte 2 instead. The asymmetry is real;
+mixing the two up produces a handshake that stalls after the first exchange.
+
+### Two encryption modes
+
+- **Control** (the handshake) is a single raw AES-CBC block, no wrapper.
+- **Data** (anything drawn on the display) is framed first — 16 random bytes,
+  the payload, random filler, and the pad length in the last byte — and then
+  encrypted. `frame()` always rounds up to whole blocks.
+
+The implementation is verified against the reference algorithms run through the
+JDK: `src/protocol/bccu/__tests__/crypto.test.ts` asserts byte-exact AES output,
+nonce interleaving, challenge mirroring and all sixteen derived keys.
+
+### Why this one works on iOS
+
+It is ordinary BLE, and Core Bluetooth is open to any app. Only the older
+serial link runs into the MFi restriction, so on an iPhone a Gen-3 bike can be
+driven from this app while an older one cannot.
+
+## Phone → bike: the older MY RIDE serial link
 
 The dashboard registers an RFCOMM service under the vendor UUID:
 

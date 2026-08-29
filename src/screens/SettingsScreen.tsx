@@ -53,7 +53,24 @@ export function SettingsScreen() {
         />
       </Card>
 
-      <Card title="Dashboard">
+      <Card
+        title="Dashboard"
+        footnote="Gen-3 covers the 2020-on bikes, which speak BLE and prompt on the dash to confirm a new phone. Older MY RIDE dashboards use a Bluetooth Classic serial link, which only Android can open.">
+        <OptionRow
+          label="Which dashboard the bike has"
+          value={settings.dashboardProtocol}
+          onChange={dashboardProtocol => {
+            void bikeService.disconnect('dashboard');
+            settings.update({dashboardProtocol});
+          }}
+          options={[
+            {value: 'gen3', label: 'Gen-3 (2020 on)'},
+            {value: 'legacy', label: 'Older MY RIDE'},
+          ]}
+        />
+      </Card>
+
+      <Card title="While riding">
         <Toggle
           label="Mirror speed and gear to the bike"
           value={settings.mirrorTelemetryToDashboard}
