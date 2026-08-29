@@ -106,12 +106,26 @@ A 2020s 390 Adventure, paired as `KTM3237`, answered SDP with:
 | `0000112e` | Phone Book Access Client |
 
 No MY RIDE, which matches the manual listing it as an optional extra — but a
-plain Serial Port Profile is there. Whether the dashboard speaks the same
-length-prefixed JSON over SPP is unknown; the profiles alongside it (hands-free,
-phonebook, AVRCP) are the ones a dash uses for calls and music, so the serial
-port may well be for something else entirely. Opening it and watching what comes
-back is the only way to find out, which is what the raw byte logging on the
-Codes tab is for.
+plain Serial Port Profile is there.
+
+**That serial port accepts a connection.** The socket opens, frames can be
+written to it, and the link stays up. What it does not do is act on them: the
+display shows nothing, and the dashboard sends nothing back — not an error, not
+a byte.
+
+So SPP on this dashboard is a real serial port that is not the display channel,
+or is one that ignores traffic until something else has happened. Without MY RIDE
+activated there is no reason to expect the display service to be running at all,
+and an open socket is not evidence that it is: RFCOMM will happily connect to a
+service that then does nothing with what arrives.
+
+Two switches exist for probing further, both on the Setup tab:
+
+- **Send the opening frames on connect**, off, opens the link and only listens.
+  Worth trying on an unfamiliar dashboard: it may be waiting to introduce
+  itself, or may drop a peer that opens with something unrecognised.
+- The **Codes** tab logs every inbound chunk as hex and ASCII before parsing,
+  so anything the dashboard volunteers shows up even if it is not our framing.
 
 ## Phone → bike: the MY RIDE link
 

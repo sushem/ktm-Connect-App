@@ -1,6 +1,6 @@
 import type {LinkId, Telemetry} from '../core/types';
 import type {BluetoothService} from '../protocol/ktm/services';
-import {connectionCandidates, describeServices} from '../protocol/ktm/services';
+import {connectionCandidates, describeService, describeServices} from '../protocol/ktm/services';
 import {KtmDashboardClient} from '../protocol/ktm/KtmDashboardClient';
 import type {DashboardView} from '../protocol/ktm/messages';
 import {notificationView, restoreView} from '../protocol/ktm/messages';
@@ -80,10 +80,11 @@ class BikeService {
     session.setLink(link, {status: 'connecting', deviceId, deviceName: device?.name, message: undefined});
 
     try {
-      if (link === 'dashboard' && serviceUuid == null) {
-        await this.openDashboard(transport, deviceId);
+      let over: string | undefined;
+      if (link === 'dashboard') {
+        over = await this.openDashboard(transport, deviceId, serviceUuid);
       } else {
-        await transport.connect(deviceId, serviceUuid);
+        await transport.connect(deviceId);
       }
       transport.onDisconnect(reason => this.handleDrop(link, reason));
 
@@ -99,6 +100,7 @@ class BikeService {
         status: 'connected',
         deviceId,
         deviceName: transport.device?.name ?? device?.name,
+        service: over,
         message: undefined,
       });
     } catch (error) {
@@ -180,11 +182,19 @@ class BikeService {
    * Adventure advertises a plain Serial Port Profile instead — and there is no
    * way to tell which one speaks the protocol without opening a socket.
    */
-  private async openDashboard(transport: Transport, deviceId: string): Promise<void> {
+  private async openDashboard(
+    transport: Transport,
+    deviceId: string,
+    serviceUuid?: string,
+  ): Promise<string> {
     const session = useSession.getState();
     const advertised = session.devices.dashboard.find(device => device.id === deviceId)?.services;
 
-    const candidates = connectionCandidates(advertised ?? []);
+    // An explicitly chosen service is the only candidate; otherwise work
+    // through everything the device advertises.
+    const candidates = serviceUuid
+      ? [describeService(serviceUuid)]
+      : connectionCandidates(advertised ?? []);
 
     let lastError: unknown;
     for (const candidate of candidates) {
@@ -192,7 +202,7 @@ class BikeService {
       try {
         await transport.connect(deviceId, candidate.uuid);
         session.appendLog('dashboard', `Connected over ${candidate.label}`);
-        return;
+        return candidate.label;
       } catch (error) {
         lastError = error;
         session.appendLog('dashboard', `${candidate.label} refused: ${describe(error)}`);
@@ -240,7 +250,13 @@ class BikeService {
       onLog: line => session.appendLog('dashboard', line),
     });
     this.dashboard = client;
-    await client.handshake();
+
+    if (useSettings.getState().sendHandshake) {
+      await client.handshake();
+    } else {
+      client.listen();
+      session.appendLog('dashboard', 'Listening only — nothing sent');
+    }
     session.setDashboardView(client.currentView);
     this.syncMirroring();
   }

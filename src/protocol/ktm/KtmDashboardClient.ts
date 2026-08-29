@@ -38,11 +38,23 @@ export class KtmDashboardClient {
    * enough that the reference implementation sends two; we do the same.
    */
   async handshake(): Promise<void> {
+    this.listen();
+    await this.show(restoreView());
+    await this.show(restoreView());
+  }
+
+  /**
+   * Attach to the stream without writing anything.
+   *
+   * On a dashboard whose protocol is not known, talking first can be the wrong
+   * move — it may be waiting to introduce itself, or drop a peer that opens
+   * with something it does not recognise. Listening costs nothing and shows
+   * whether it says anything at all.
+   */
+  listen(): void {
     this.sequence = 0;
     this.unsubscribe?.();
     this.unsubscribe = this.transport.onData(chunk => this.ingest(chunk));
-    await this.show(restoreView());
-    await this.show(restoreView());
   }
 
   /** Push a view and remember it. */

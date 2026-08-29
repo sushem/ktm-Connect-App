@@ -50,3 +50,28 @@ describe('KtmDashboardClient', () => {
     expect(last.UpdateUI.TurnIcon.Visibility).toBe('off');
   });
 });
+
+describe('listening without writing', () => {
+  it('attaches to the stream but sends nothing', async () => {
+    const received: string[] = [];
+    const transport = new DemoDashboardTransport(payload => received.push(payload));
+    await transport.connect('demo');
+    const client = new KtmDashboardClient(transport);
+
+    client.listen();
+
+    expect(received).toEqual([]);
+  });
+
+  it('still numbers from zero once it does start talking', async () => {
+    const received: string[] = [];
+    const transport = new DemoDashboardTransport(payload => received.push(payload));
+    await transport.connect('demo');
+    const client = new KtmDashboardClient(transport);
+
+    client.listen();
+    await client.show(notificationView('Hello'));
+
+    expect(JSON.parse(received[0]).MsgId).toBe('Restore#0');
+  });
+});

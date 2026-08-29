@@ -63,6 +63,12 @@ export function SettingsScreen() {
           }}
         />
         <Toggle
+          label="Send the opening frames on connect"
+          hint="Off means the app opens the link and only listens. Useful on a dashboard that does not recognise what we send, to see whether it says anything first."
+          value={settings.sendHandshake}
+          onChange={sendHandshake => settings.update({sendHandshake})}
+        />
+        <Toggle
           label="Demo mode"
           hint="Simulated bike and dashboard, for trying the app without hardware."
           value={settings.demoMode}

@@ -29,6 +29,8 @@ export interface LinkState {
   deviceName?: string;
   /** Human readable detail for the UI: last error, or what we are waiting on. */
   message?: string;
+  /** Which Bluetooth service the link is open on, once it is connected. */
+  service?: string;
   since?: number;
 }
 

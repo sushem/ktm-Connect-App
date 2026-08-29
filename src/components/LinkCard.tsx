@@ -97,7 +97,10 @@ export function LinkCard({
             <View style={styles.connectedRow}>
               <View style={styles.connectedText}>
                 <Text style={styles.deviceName}>{state.deviceName ?? state.deviceId}</Text>
-                <Text style={styles.deviceMeta}>{state.deviceId}</Text>
+                <Text style={styles.deviceMeta}>
+                  {state.deviceId}
+                  {state.service ? `  ·  over ${state.service}` : ''}
+                </Text>
               </View>
               <Button
                 label="Disconnect"
