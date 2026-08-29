@@ -1,6 +1,7 @@
 import {KTM_SERVICE_UUID} from '../../../transport/KtmLinkTransport';
 import {
   connectableServices,
+  connectionCandidates,
   describeService,
   describeServices,
   hasMyRide,
@@ -82,5 +83,37 @@ describe('connectableServices', () => {
 
   it('leaves out audio and phone profiles, which are not serial ports', () => {
     expect(connectableServices([HANDSFREE, A2DP_SINK])).toEqual([]);
+  });
+});
+
+describe('connectionCandidates', () => {
+  it('always leads with MY RIDE, even when SDP did not list it', () => {
+    const candidates = connectionCandidates([]);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].isMyRide).toBe(true);
+  });
+
+  it('falls back to the serial port a dashboard without MY RIDE advertises', () => {
+    // What a 390 Adventure reports: audio and phone profiles, plus a plain SPP.
+    const candidates = connectionCandidates([HANDSFREE, SPP, A2DP_SINK]);
+
+    expect(candidates.map(service => service.label)).toEqual([
+      'KTM MY RIDE',
+      'Serial Port (SPP)',
+    ]);
+  });
+
+  it('does not try MY RIDE twice when the device does advertise it', () => {
+    const candidates = connectionCandidates([KTM_SERVICE_UUID, SPP]);
+    expect(candidates.filter(service => service.isMyRide)).toHaveLength(1);
+  });
+
+  it('puts a vendor service ahead of a generic serial port', () => {
+    const candidates = connectionCandidates([SPP, VENDOR]);
+    expect(candidates.map(service => service.uuid)).toEqual([
+      KTM_SERVICE_UUID.toLowerCase(),
+      VENDOR,
+      SPP,
+    ]);
   });
 });

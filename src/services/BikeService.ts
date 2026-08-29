@@ -1,6 +1,6 @@
 import type {LinkId, Telemetry} from '../core/types';
 import type {BluetoothService} from '../protocol/ktm/services';
-import {describeServices} from '../protocol/ktm/services';
+import {connectionCandidates, describeServices} from '../protocol/ktm/services';
 import {KtmDashboardClient} from '../protocol/ktm/KtmDashboardClient';
 import type {DashboardView} from '../protocol/ktm/messages';
 import {notificationView, restoreView} from '../protocol/ktm/messages';
@@ -60,6 +60,8 @@ class BikeService {
       return [];
     }
     const uuids = await transport.discoverServices(deviceId);
+    // Remember them, so connecting can try each serial service in turn.
+    session.setDeviceServices('dashboard', deviceId, uuids);
     session.appendLog(
       'dashboard',
       uuids.length > 0
@@ -78,7 +80,11 @@ class BikeService {
     session.setLink(link, {status: 'connecting', deviceId, deviceName: device?.name, message: undefined});
 
     try {
-      await transport.connect(deviceId, serviceUuid);
+      if (link === 'dashboard' && serviceUuid == null) {
+        await this.openDashboard(transport, deviceId);
+      } else {
+        await transport.connect(deviceId, serviceUuid);
+      }
       transport.onDisconnect(reason => this.handleDrop(link, reason));
 
       if (link === 'telemetry') {
@@ -165,6 +171,39 @@ class BikeService {
     } else {
       this.stopMirroring();
     }
+  }
+
+  /**
+   * Try each serial service the dashboard offers, MY RIDE first.
+   *
+   * Not every dashboard carries the vendor service the 790 uses — a 390
+   * Adventure advertises a plain Serial Port Profile instead — and there is no
+   * way to tell which one speaks the protocol without opening a socket.
+   */
+  private async openDashboard(transport: Transport, deviceId: string): Promise<void> {
+    const session = useSession.getState();
+    const advertised = session.devices.dashboard.find(device => device.id === deviceId)?.services;
+
+    const candidates = connectionCandidates(advertised ?? []);
+
+    let lastError: unknown;
+    for (const candidate of candidates) {
+      session.appendLog('dashboard', `Trying ${candidate.label} (${candidate.uuid})`);
+      try {
+        await transport.connect(deviceId, candidate.uuid);
+        session.appendLog('dashboard', `Connected over ${candidate.label}`);
+        return;
+      } catch (error) {
+        lastError = error;
+        session.appendLog('dashboard', `${candidate.label} refused: ${describe(error)}`);
+      }
+    }
+
+    const tried = candidates.map(candidate => candidate.label).join(', ');
+    throw new Error(
+      `None of the services on this device accepted a connection (tried ${tried}). ` +
+        `Last error: ${describe(lastError)}`,
+    );
   }
 
   private async startTelemetry(): Promise<void> {

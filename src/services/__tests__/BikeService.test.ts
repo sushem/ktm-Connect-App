@@ -95,3 +95,56 @@ describe('inspecting what a dashboard offers', () => {
     expect(logged.some(text => text.includes('offers 3 service(s)'))).toBe(true);
   });
 });
+
+describe('choosing a service to connect over', () => {
+  const SPP = '00001101-0000-1000-8000-00805f9b34fb';
+  const HANDSFREE = '0000111e-0000-1000-8000-00805f9b34fb';
+
+  beforeEach(() => {
+    useSettings.setState({demoMode: true});
+    useSession.setState({log: [], devices: {telemetry: [], dashboard: []}});
+  });
+
+  afterEach(async () => {
+    await bikeService.disconnect('dashboard');
+  });
+
+  const attempts = () =>
+    useSession
+      .getState()
+      .log.map(line => line.text)
+      .filter(text => text.startsWith('Trying '));
+
+  it('tries MY RIDE first', async () => {
+    await bikeService.connect('dashboard', 'demo-dashboard');
+
+    expect(attempts()[0]).toContain('KTM MY RIDE');
+  });
+
+  it('reports every service it tried when none of them work', async () => {
+    useSession.getState().addDevice('dashboard', {
+      id: 'demo-dashboard',
+      name: 'KTM3237',
+      likelyMatch: true,
+      // A dashboard like the 390 Adventure: a serial port, but no MY RIDE.
+      services: [HANDSFREE, SPP],
+    });
+    // The simulated dashboard only answers on the services it advertises.
+    useSession.setState({log: []});
+
+    await expect(bikeService.connect('dashboard', 'nothing-here', SPP)).rejects.toThrow();
+  });
+
+  it('remembers what an SDP lookup found, so connecting can use it', async () => {
+    useSession.getState().addDevice('dashboard', {
+      id: 'demo-dashboard',
+      name: 'KTM3237',
+      likelyMatch: true,
+    });
+
+    await bikeService.discoverServices('demo-dashboard');
+
+    const device = useSession.getState().devices.dashboard[0];
+    expect(device.services).toHaveLength(3);
+  });
+});

@@ -1,4 +1,5 @@
 import type {Transport} from '../../transport/types';
+import {hexPreview} from '../../utils/hex';
 import {concatBytes, decodeFrames, encodeFrame} from './framing';
 import {
   restoreView,
@@ -69,6 +70,10 @@ export class KtmDashboardClient {
   }
 
   private ingest(chunk: Uint8Array): void {
+    // Log the raw bytes before anything interprets them: on an unfamiliar
+    // dashboard, what comes back is the only evidence of what it speaks.
+    this.options.onLog?.(`← raw ${hexPreview(chunk)}`);
+
     this.inbound = concatBytes(this.inbound, chunk);
     try {
       const {frames, rest} = decodeFrames(this.inbound);
@@ -78,8 +83,9 @@ export class KtmDashboardClient {
         this.options.onMessage?.(frame.payload);
       });
     } catch {
-      // A desynchronised stream never recovers on its own; drop what we have.
-      this.options.onLog?.(`← dropped ${this.inbound.length} unparseable bytes`);
+      // A desynchronised stream never recovers on its own; drop what we have,
+      // but say what it was — this is not our framing, and that is worth knowing.
+      this.options.onLog?.(`← not KTM framing, dropping ${hexPreview(this.inbound)}`);
       this.inbound = new Uint8Array(0);
     }
   }

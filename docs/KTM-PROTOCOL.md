@@ -83,14 +83,35 @@ device and lists the services it advertises. Three outcomes:
   That is a dashboard whose Bluetooth works for music and calls but has no
   MY RIDE. A dealer activation is what unlocks it; nothing in software gets
   around that.
-- **A vendor UUID that is not the one below.** Interesting: a newer dashboard
-  may have moved the service. The app offers a **Try** button on any vendor
-  UUID and on the Serial Port Profile, so it can be pointed at a different one
-  without a rebuild.
+- **A plain Serial Port Profile (0x1101), or a vendor UUID that is not the one
+  below.** Interesting: the dashboard may carry the same protocol on a
+  different service. Connecting tries MY RIDE first and then every serial
+  service the device advertises, in that order, and each one also has a **Try**
+  button of its own.
 
 Note that being on the bike's pairing screen is not the same as being paired.
 The app only lists **bonded** devices, so the phone has to have finished pairing
 in its own Bluetooth settings first.
+
+### One real dashboard: a 390 Adventure
+
+A 2020s 390 Adventure, paired as `KTM3237`, answered SDP with:
+
+| UUID | Service |
+|---|---|
+| `0000110e` | A/V Remote Control |
+| `0000111e` | Hands-Free |
+| `00001124` | Human Interface Device |
+| `00001101` | **Serial Port (SPP)** |
+| `0000112e` | Phone Book Access Client |
+
+No MY RIDE, which matches the manual listing it as an optional extra — but a
+plain Serial Port Profile is there. Whether the dashboard speaks the same
+length-prefixed JSON over SPP is unknown; the profiles alongside it (hands-free,
+phonebook, AVRCP) are the ones a dash uses for calls and music, so the serial
+port may well be for something else entirely. Opening it and watching what comes
+back is the only way to find out, which is what the raw byte logging on the
+Codes tab is for.
 
 ## Phone → bike: the MY RIDE link
 

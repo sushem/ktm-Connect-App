@@ -34,6 +34,7 @@ interface SessionState {
   setLink: (link: LinkId, state: Partial<LinkState>) => void;
   setDevices: (link: LinkId, devices: DiscoveredDevice[]) => void;
   addDevice: (link: LinkId, device: DiscoveredDevice) => void;
+  setDeviceServices: (link: LinkId, deviceId: string, services: string[]) => void;
   mergeTelemetry: (patch: Telemetry) => void;
   resetTelemetry: () => void;
   setCodes: (codes: DiagnosticCode[]) => void;
@@ -79,6 +80,16 @@ export const useSession = create<SessionState>((set, get) => ({
       });
       return {devices: {...current.devices, [link]: next}};
     }),
+
+  setDeviceServices: (link, deviceId, services) =>
+    set(current => ({
+      devices: {
+        ...current.devices,
+        [link]: current.devices[link].map(device =>
+          device.id === deviceId ? {...device, services} : device,
+        ),
+      },
+    })),
 
   mergeTelemetry: patch =>
     set(current => {

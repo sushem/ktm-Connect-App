@@ -214,7 +214,7 @@ function ServicePanel({
             <View key={service.uuid} style={styles.serviceRow}>
               <View style={styles.serviceText}>
                 <Text style={service.isMyRide ? styles.serviceGood : styles.serviceLabel}>
-                  {service.isMyRide ? 'KTM MY RIDE' : service.label}
+                  {service.label}
                 </Text>
                 <Text style={styles.serviceUuid}>{service.uuid}</Text>
               </View>

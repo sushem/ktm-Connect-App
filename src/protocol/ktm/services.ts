@@ -30,12 +30,15 @@ const WELL_KNOWN: Record<string, string> = {
   '111f': 'Hands-Free Audio Gateway',
   '1124': 'Human Interface Device',
   '112d': 'SIM Access',
+  '112e': 'Phone Book Access Client',
   '112f': 'Phone Book Access Server',
   '1130': 'Phone Book Access',
   '1132': 'Message Access Server',
   '1133': 'Message Notification Server',
   '1134': 'Message Access',
   '1200': 'Device Identification',
+  '1203': 'Generic Audio',
+  '1204': 'Generic Telephony',
 };
 
 export interface BluetoothService {
@@ -66,11 +69,14 @@ export function describeService(uuid: string): BluetoothService {
   const normalized = normalizeUuid(uuid);
   const short = shortUuid(normalized);
   const known = short ? WELL_KNOWN[short] : undefined;
+  const isMyRide = normalized === normalizeUuid(KTM_SERVICE_UUID);
 
   return {
     uuid: normalized,
-    label: known ?? (short ? `Standard service 0x${short.toUpperCase()}` : normalized),
-    isMyRide: normalized === normalizeUuid(KTM_SERVICE_UUID),
+    label: isMyRide
+      ? 'KTM MY RIDE'
+      : (known ?? (short ? `Standard service 0x${short.toUpperCase()}` : normalized)),
+    isMyRide,
     isStandard: short != null,
   };
 }
@@ -111,5 +117,19 @@ export function hasMyRide(uuids: string[]): boolean {
 export function connectableServices(uuids: string[]): BluetoothService[] {
   return describeServices(uuids).filter(
     service => service.isMyRide || !service.isStandard || shortUuid(service.uuid) === '1101',
+  );
+}
+
+/**
+ * The order to try services in when opening the dashboard link: MY RIDE first
+ * because it is what the protocol was written against, then whatever else on
+ * the device could carry a serial stream. Always includes MY RIDE, even when
+ * the device did not advertise it — SDP records are not always complete, and
+ * an attempt costs a second.
+ */
+export function connectionCandidates(advertised: string[]): BluetoothService[] {
+  const candidates = [describeService(KTM_SERVICE_UUID), ...connectableServices(advertised)];
+  return candidates.filter(
+    (service, index) => candidates.findIndex(other => other.uuid === service.uuid) === index,
   );
 }

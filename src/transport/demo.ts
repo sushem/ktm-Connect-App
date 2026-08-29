@@ -166,6 +166,16 @@ export class DemoDashboardTransport extends BaseDemoTransport {
     return DEMO_DASHBOARD_SERVICES;
   }
 
+  /** Refuse a service this dashboard does not run, as a real one would. */
+  async connect(deviceId: string, serviceUuid?: string): Promise<void> {
+    if (serviceUuid && !DEMO_DASHBOARD_SERVICES.includes(serviceUuid.toLowerCase())) {
+      throw new Error(
+        `read failed, socket might closed or timeout, read ret: -1 (${serviceUuid})`,
+      );
+    }
+    await super.connect(deviceId);
+  }
+
   async write(data: Uint8Array): Promise<void> {
     this.buffer = concatBytes(this.buffer, data);
     const {frames, rest} = decodeFrames(this.buffer);
