@@ -8,7 +8,9 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded pull request runs are worth cancelling; a main run is not, since
+  # it is the one that publishes a release.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   javascript:
@@ -41,6 +43,11 @@ jobs:
     name: Compile the Android app
     needs: javascript
     runs-on: ubuntu-latest
+
+    env:
+      # Merges to main get a release build and a GitHub release; pull requests
+      # only get the debug APK, so the feedback stays quick.
+      IS_MAIN: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
     steps:
       - name: Check out code
@@ -89,3 +96,71 @@ jobs:
           path: android/app/build/outputs/apk/debug/KtmConnect-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Assemble the release APK
+        if: ${{ env.IS_MAIN == 'true' }}
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Rename release APK
+        if: ${{ env.IS_MAIN == 'true' }}
+        run: |
+          mv android/app/build/outputs/apk/release/app-release.apk \
+             android/app/build/outputs/apk/release/KtmConnect.apk
+
+      - name: Upload release APK
+        if: ${{ env.IS_MAIN == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: KtmConnect-apk
+          path: android/app/build/outputs/apk/release/KtmConnect.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish a release
+    needs: android
+    # Only on main: a release per pull request would bury the real ones.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+
+    # Write access is confined to this job, which is the only one that needs it.
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download the APKs
+        uses: actions/download-artifact@v7
+        with:
+          pattern: KtmConnect*apk
+          merge-multiple: true
+          path: apks
+
+      - name: Verify downloaded files
+        run: |
+          echo "Downloaded APKs:"
+          find apks -type f -name "*.apk" -ls
+
+      # Tagged main-<n> rather than build-<n>: each workflow has its own run
+      # number, so sharing a prefix with the manual Build APK workflow would
+      # eventually collide on a tag.
+      - name: Publish the release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: main-${{ github.run_number }}
+          name: Main build ${{ github.run_number }}
+          prerelease: true
+          body: |
+            Built from `${{ github.sha }}` on merge to main.
+
+            - `KtmConnect-debug.apk` — debuggable, for testing
+            - `KtmConnect.apk` — release build
+
+            Marked as a pre-release because both are signed with React
+            Native's debug keystore. They install and run, but a real
+            keystore is needed before publishing anywhere.
+          files: |
+            apks/KtmConnect-debug.apk
+            apks/KtmConnect.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

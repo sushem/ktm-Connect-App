@@ -75,18 +75,23 @@ npm run lint
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `.github/workflows/ci.yml` | every push to `main` and every pull request | typecheck, lint, tests, then `assembleDebug` — which is what proves the native module and its codegen spec still agree — and uploads the resulting debug APK as a build artifact (kept 14 days) |
-| `.github/workflows/build-apk.yml` | manual (**Actions → Build APK → Run workflow**) | builds a debug APK, a release APK or both, uploads them as artifacts, and publishes a GitHub release |
+| `.github/workflows/ci.yml` | every pull request | typecheck, lint, tests, then `assembleDebug` — which is what proves the native module and its codegen spec still agree — and uploads the debug APK as a build artifact (kept 14 days) |
+| `.github/workflows/ci.yml` | every push to `main` | all of the above, plus `assembleRelease`, and publishes both APKs as a GitHub release tagged `main-<run number>` |
+| `.github/workflows/build-apk.yml` | manual (**Actions → Build APK → Run workflow**) | builds a debug APK, a release APK or both, uploads them as artifacts, and publishes a GitHub release tagged `build-<run number>` |
 
-To install a build from a pull request, open its CI run and download
+So every merge to `main` leaves an installable build under
+[Releases](../../releases) with no one having to press anything, and
+`build-apk.yml` stays for cutting one on demand from any commit. The two use
+different tag prefixes because each workflow counts its own run numbers.
+
+To install a build from a pull request instead, open its CI run and download
 **KtmConnect-debug-apk** from the Artifacts section at the bottom of the summary
-page. GitHub only shows the **Run workflow** button for `build-apk.yml` once
-that file is on the default branch, so releases can only be cut after this is
-merged.
+page.
 
-Both release and debug APKs are signed with React Native's debug keystore, so
-they install and run but are not fit to publish. Generate a real keystore and
-wire it into `android/app/build.gradle` before distributing anything.
+Releases are marked as pre-releases, because both APKs are signed with React
+Native's debug keystore: they install and run, but are not fit to publish.
+Generate a real keystore and wire it into `android/app/build.gradle` before
+distributing anything.
 
 There is no iOS workflow yet — that comes once the Android side has proven
 itself, since a macOS runner costs about ten times as much per minute.
