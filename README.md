@@ -75,8 +75,8 @@ npm run lint
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `.github/workflows/ci.yml` | every pull request | typecheck, lint, tests, then `assembleDebug` — which is what proves the native module and its codegen spec still agree — and uploads the debug APK as a build artifact (kept 14 days) |
-| `.github/workflows/ci.yml` | every push to `main` | all of the above, plus `assembleRelease`, and publishes both APKs as a GitHub release tagged `main-<run number>` |
+| `.github/workflows/ci.yml` | every pull request | typecheck, lint, tests, then `assembleRelease` — which is what proves the native module and its codegen spec still agree — and uploads `KtmConnect.apk` as a build artifact (kept 14 days) |
+| `.github/workflows/ci.yml` | every push to `main` | all of the above, and publishes the APK as a GitHub release tagged `main-<run number>` |
 | `.github/workflows/build-apk.yml` | manual (**Actions → Build APK → Run workflow**) | builds a debug APK, a release APK or both, uploads them as artifacts, and publishes a GitHub release tagged `build-<run number>` |
 
 So every merge to `main` leaves an installable build under
@@ -85,11 +85,16 @@ So every merge to `main` leaves an installable build under
 different tag prefixes because each workflow counts its own run numbers.
 
 To install a build from a pull request instead, open its CI run and download
-**KtmConnect-debug-apk** from the Artifacts section at the bottom of the summary
-page.
+**KtmConnect-apk** from the Artifacts section at the bottom of the summary page.
 
-Releases are marked as pre-releases, because both APKs are signed with React
-Native's debug keystore: they install and run, but are not fit to publish.
+CI builds the *release* variant deliberately. A debug APK leaves the JavaScript
+out and fetches it from Metro when it starts, so installing one on a phone with
+no `npm start` running gives a red "Unable to load script" screen. Debug builds
+are for `npm run android` during development, where Metro is there to serve
+them.
+
+Releases are marked as pre-releases, because the APK is signed with React
+Native's debug keystore: it installs and runs, but is not fit to publish.
 Generate a real keystore and wire it into `android/app/build.gradle` before
 distributing anything.
 

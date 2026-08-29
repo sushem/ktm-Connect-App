@@ -44,11 +44,6 @@ jobs:
     needs: javascript
     runs-on: ubuntu-latest
 
-    env:
-      # Merges to main get a release build and a GitHub release; pull requests
-      # only get the debug APK, so the feedback stays quick.
-      IS_MAIN: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-
     steps:
       - name: Check out code
         uses: actions/checkout@v6
@@ -76,40 +71,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # This is what catches a broken native module or codegen spec: the
-      # generated Java spec and our Kotlin implementation have to agree.
-      - name: Assemble the debug APK
-        working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
-
-      - name: Rename debug APK
-        run: |
-          mv android/app/build/outputs/apk/debug/app-debug.apk \
-             android/app/build/outputs/apk/debug/KtmConnect-debug.apk
-
-      # The build already happened, so hand the APK over rather than making
-      # anyone run the manual workflow to get an installable build.
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v7
-        with:
-          name: KtmConnect-debug-apk
-          path: android/app/build/outputs/apk/debug/KtmConnect-debug.apk
-          if-no-files-found: error
-          retention-days: 14
-
+      # Release rather than debug, for two reasons: a debug APK leaves the
+      # JavaScript out and asks Metro for it at launch, so it cannot run on
+      # its own phone; and this variant compiles the same Kotlin and codegen
+      # output, so it is still the check that the native module builds.
       - name: Assemble the release APK
-        if: ${{ env.IS_MAIN == 'true' }}
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
 
-      - name: Rename release APK
-        if: ${{ env.IS_MAIN == 'true' }}
+      - name: Rename the APK
         run: |
           mv android/app/build/outputs/apk/release/app-release.apk \
              android/app/build/outputs/apk/release/KtmConnect.apk
 
-      - name: Upload release APK
-        if: ${{ env.IS_MAIN == 'true' }}
+      # Confirms the bundler actually ran: without index.android.bundle inside,
+      # the app launches to a red screen asking for Metro.
+      - name: Check the JavaScript bundle is packaged
+        run: |
+          unzip -l android/app/build/outputs/apk/release/KtmConnect.apk \
+            | grep -q 'assets/index.android.bundle' \
+            || { echo "::error::index.android.bundle is missing from the APK"; exit 1; }
+
+      - name: Upload the APK
         uses: actions/upload-artifact@v7
         with:
           name: KtmConnect-apk
@@ -129,11 +112,10 @@ jobs:
       contents: write
 
     steps:
-      - name: Download the APKs
+      - name: Download the APK
         uses: actions/download-artifact@v7
         with:
-          pattern: KtmConnect*apk
-          merge-multiple: true
+          name: KtmConnect-apk
           path: apks
 
       - name: Verify downloaded files
@@ -153,14 +135,12 @@ jobs:
           body: |
             Built from `${{ github.sha }}` on merge to main.
 
-            - `KtmConnect-debug.apk` — debuggable, for testing
-            - `KtmConnect.apk` — release build
+            - `KtmConnect.apk` — install and run, no computer needed
 
-            Marked as a pre-release because both are signed with React
-            Native's debug keystore. They install and run, but a real
-            keystore is needed before publishing anywhere.
+            Marked as a pre-release because it is signed with React Native's
+            debug keystore. A real keystore is needed before publishing
+            anywhere.
           files: |
-            apks/KtmConnect-debug.apk
             apks/KtmConnect.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -120,10 +120,12 @@ jobs:
 
             Build type: `debug`
 
-            - `KtmConnect-debug.apk` — debuggable, for testing
+            - `KtmConnect-debug.apk` — for development only
 
-            Signed with the React Native debug keystore, so it installs
-            side by side with nothing else and is not for distribution.
+            A debug APK does not contain the JavaScript bundle: it loads it
+            from Metro at launch, so it shows a red screen unless
+            `npm start` is running and reachable from the phone. For a build
+            that runs on its own, use `release`.
           files: |
             apks/KtmConnect-debug.apk
         env:
@@ -140,7 +142,7 @@ jobs:
 
             Build type: `release`
 
-            - `KtmConnect.apk` — release build
+            - `KtmConnect.apk` — install and run, no computer needed
 
             Still signed with the debug keystore: set up a real one before
             publishing anywhere.
@@ -160,8 +162,10 @@ jobs:
 
             Build type: `both`
 
-            - `KtmConnect-debug.apk` — debuggable, for testing
-            - `KtmConnect.apk` — release build
+            - `KtmConnect.apk` — install and run, no computer needed
+            - `KtmConnect-debug.apk` — development only; it loads the
+              JavaScript from Metro at launch, so it needs `npm start`
+              running and reachable from the phone
 
             Both are signed with the React Native debug keystore: set up a
             real one before publishing anywhere.
