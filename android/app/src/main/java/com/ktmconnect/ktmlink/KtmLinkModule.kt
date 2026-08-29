@@ -5,9 +5,15 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothSocket
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.ParcelUuid
 import android.util.Base64
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.Arguments
@@ -63,6 +69,7 @@ class KtmLinkModule(reactContext: ReactApplicationContext) : NativeKtmLinkSpec(r
             putString("id", device.address)
             putString("name", device.name ?: device.address)
             putBoolean("bonded", device.bondState == BluetoothDevice.BOND_BONDED)
+            putArray("uuids", uuidArray(device.uuids?.map { it.uuid.toString() }.orEmpty()))
           }
         )
       }
@@ -71,6 +78,93 @@ class KtmLinkModule(reactContext: ReactApplicationContext) : NativeKtmLinkSpec(r
       promise.reject(ERR_PERMISSION, e.message, e)
     }
   }
+
+  /**
+   * Run a fresh SDP query against the device.
+   *
+   * The cached UUID list is often empty or stale — Android only fills it during
+   * pairing — so this asks the device again and waits for the ACTION_UUID
+   * broadcast, falling back to whatever was cached if nothing arrives.
+   */
+  override fun discoverServices(address: String, promise: Promise) {
+    val adapter = adapter()
+    if (adapter == null) {
+      promise.reject(ERR_UNSUPPORTED, "This device has no Bluetooth adapter")
+      return
+    }
+    if (!hasConnectPermission()) {
+      promise.reject(ERR_PERMISSION, "BLUETOOTH_CONNECT permission has not been granted")
+      return
+    }
+
+    val device =
+      try {
+        adapter.getRemoteDevice(address)
+      } catch (e: IllegalArgumentException) {
+        promise.reject(ERR_CONNECT, "\"$address\" is not a Bluetooth address", e)
+        return
+      }
+
+    val settled = AtomicBoolean(false)
+    val cached = { device.uuids?.map { it.uuid.toString() }.orEmpty() }
+
+    val receiver =
+      object : BroadcastReceiver() {
+        @Suppress("DEPRECATION") // The typed overloads only exist from API 33.
+        override fun onReceive(context: Context, intent: Intent) {
+          val forDevice =
+            intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)?.address
+          if (forDevice != null && !forDevice.equals(address, ignoreCase = true)) {
+            return
+          }
+          val found =
+            intent
+              .getParcelableArrayExtra(BluetoothDevice.EXTRA_UUID)
+              ?.filterIsInstance<ParcelUuid>()
+              ?.map { it.uuid.toString() }
+              .orEmpty()
+          finish(this, settled, promise, if (found.isNotEmpty()) found else cached())
+        }
+      }
+
+    ContextCompat.registerReceiver(
+      reactApplicationContext,
+      receiver,
+      IntentFilter(BluetoothDevice.ACTION_UUID),
+      ContextCompat.RECEIVER_NOT_EXPORTED,
+    )
+
+    // SDP has no failure callback, so cap the wait and report what we have.
+    Handler(Looper.getMainLooper()).postDelayed(
+      { finish(receiver, settled, promise, cached()) },
+      SDP_TIMEOUT_MS,
+    )
+
+    try {
+      runCatching { adapter.cancelDiscovery() }
+      if (!device.fetchUuidsWithSdp()) {
+        finish(receiver, settled, promise, cached())
+      }
+    } catch (e: SecurityException) {
+      finish(receiver, settled, promise, cached())
+    }
+  }
+
+  private fun finish(
+    receiver: BroadcastReceiver,
+    settled: AtomicBoolean,
+    promise: Promise,
+    uuids: List<String>,
+  ) {
+    if (!settled.compareAndSet(false, true)) {
+      return
+    }
+    runCatching { reactApplicationContext.unregisterReceiver(receiver) }
+    promise.resolve(uuidArray(uuids))
+  }
+
+  private fun uuidArray(uuids: List<String>) =
+    Arguments.createArray().apply { uuids.distinct().forEach { pushString(it) } }
 
   override fun connect(address: String, uuid: String, secure: Boolean, promise: Promise) {
     val adapter = adapter()
@@ -227,6 +321,8 @@ class KtmLinkModule(reactContext: ReactApplicationContext) : NativeKtmLinkSpec(r
 
   companion object {
     const val NAME: String = "KtmLink"
+
+    private const val SDP_TIMEOUT_MS = 12_000L
 
     const val EVENT_DATA: String = "KtmLink:data"
     const val EVENT_DISCONNECT: String = "KtmLink:disconnect"

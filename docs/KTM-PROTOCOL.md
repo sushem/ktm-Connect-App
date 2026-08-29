@@ -54,6 +54,44 @@ Gear is not an OBD-II parameter. The app derives it from the ratio between
 engine speed and road speed, matched against a per-bike table
 (`src/utils/gear.ts`).
 
+## Is MY RIDE even on this bike?
+
+Worth settling before debugging a connection. KTM MY RIDE is not standard
+equipment across the range: the 390 Adventure owner's manual lists MY RIDE,
+Pairing, Phone, Headset, Telephony and Bluetooth as **optional**, and KTM's own
+documentation says the function "must be activated by an authorised KTM dealer".
+On several models it is a paid unlock rather than a menu item you can switch on.
+
+A dashboard without that activation runs no MY RIDE service at all. The socket
+then fails with Android's catch-all:
+
+```
+read failed, socket might closed or timeout, read ret: -1
+```
+
+which is the same error you get for a device that is not bonded, or one that is
+busy — so the message alone proves nothing.
+
+The app answers it directly instead. **Connect → the MY RIDE card → "What does
+this device offer?"** runs an SDP query (`fetchUuidsWithSdp`) against the paired
+device and lists the services it advertises. Three outcomes:
+
+- **MY RIDE is listed.** The dashboard is ready; a failure to connect is
+  something else — most often the bike being paired to another phone, or the
+  ignition being off.
+- **Only audio and phone profiles** (Hands-Free, A2DP, AVRCP, Phone Book).
+  That is a dashboard whose Bluetooth works for music and calls but has no
+  MY RIDE. A dealer activation is what unlocks it; nothing in software gets
+  around that.
+- **A vendor UUID that is not the one below.** Interesting: a newer dashboard
+  may have moved the service. The app offers a **Try** button on any vendor
+  UUID and on the Serial Port Profile, so it can be pointed at a different one
+  without a rebuild.
+
+Note that being on the bike's pairing screen is not the same as being paired.
+The app only lists **bonded** devices, so the phone has to have finished pairing
+in its own Bluetooth settings first.
+
 ## Phone → bike: the MY RIDE link
 
 The dashboard registers an RFCOMM service under the vendor UUID:
@@ -123,7 +161,9 @@ come from community reverse engineering — chiefly the
 and the ADVrider thread it cites — and were confirmed against a 790 Adventure.
 Newer "Gen 3" dashboards and the KTMconnect app may differ; if the display
 ignores what you send, the framing is the first thing to check, with the
-message-id counter second.
+message-id counter second. The reference work was done on a 790 Adventure, a
+model where MY RIDE is present; smaller bikes in the range may not carry the
+service at all, as above.
 
 Nothing here bypasses a protection mechanism or unlocks a paid feature: it is
 the same public serial service the official app uses, addressed by an app you

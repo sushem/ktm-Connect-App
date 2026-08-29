@@ -39,6 +39,8 @@ export interface DiscoveredDevice {
   rssi?: number;
   /** True when the device name/advertisement looks like the thing we want. */
   likelyMatch: boolean;
+  /** Service UUIDs the device advertises, where the transport can see them. */
+  services?: string[];
 }
 
 /**

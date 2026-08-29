@@ -1,4 +1,6 @@
 import type {LinkId, Telemetry} from '../core/types';
+import type {BluetoothService} from '../protocol/ktm/services';
+import {describeServices} from '../protocol/ktm/services';
 import {KtmDashboardClient} from '../protocol/ktm/KtmDashboardClient';
 import type {DashboardView} from '../protocol/ktm/messages';
 import {notificationView, restoreView} from '../protocol/ktm/messages';
@@ -6,7 +8,7 @@ import {ObdClient} from '../protocol/obd/ObdClient';
 import {BleTransport} from '../transport/BleTransport';
 import {DemoDashboardTransport, DemoObdTransport} from '../transport/demo';
 import {KtmLinkTransport} from '../transport/KtmLinkTransport';
-import type {Transport} from '../transport/types';
+import {canInspectServices, type Transport} from '../transport/types';
 import {useSession} from '../state/sessionStore';
 import {useSettings} from '../state/settingsStore';
 import {estimateGear} from '../utils/gear';
@@ -47,7 +49,27 @@ class BikeService {
     }
   }
 
-  async connect(link: LinkId, deviceId: string): Promise<void> {
+  /**
+   * List the Bluetooth services a paired device offers. Only the RFCOMM
+   * transport can answer this; anything else reports nothing.
+   */
+  async discoverServices(deviceId: string): Promise<BluetoothService[]> {
+    const transport = this.transportFor('dashboard');
+    const session = useSession.getState();
+    if (!canInspectServices(transport)) {
+      return [];
+    }
+    const uuids = await transport.discoverServices(deviceId);
+    session.appendLog(
+      'dashboard',
+      uuids.length > 0
+        ? `${deviceId} offers ${uuids.length} service(s): ${uuids.join(', ')}`
+        : `${deviceId} advertised no services`,
+    );
+    return describeServices(uuids);
+  }
+
+  async connect(link: LinkId, deviceId: string, serviceUuid?: string): Promise<void> {
     const session = useSession.getState();
     const settings = useSettings.getState();
     const transport = this.transportFor(link);
@@ -56,7 +78,7 @@ class BikeService {
     session.setLink(link, {status: 'connecting', deviceId, deviceName: device?.name, message: undefined});
 
     try {
-      await transport.connect(deviceId);
+      await transport.connect(deviceId, serviceUuid);
       transport.onDisconnect(reason => this.handleDrop(link, reason));
 
       if (link === 'telemetry') {

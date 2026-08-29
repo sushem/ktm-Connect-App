@@ -15,6 +15,8 @@ export type PairedDevice = {
   id: string;
   name: string;
   bonded: boolean;
+  /** Service UUIDs Android has cached for this device; often empty until queried. */
+  uuids: string[];
 };
 
 export interface Spec extends TurboModule {
@@ -24,6 +26,12 @@ export interface Spec extends TurboModule {
   isEnabled(): Promise<boolean>;
   /** Devices already paired with the phone. Discovery is not needed: the bike must be bonded. */
   getPairedDevices(): Promise<PairedDevice[]>;
+  /**
+   * Ask the device over SDP which services it actually offers, and return
+   * their UUIDs. This is how we tell "the bike is not running MY RIDE" apart
+   * from "the connection failed", which otherwise look identical.
+   */
+  discoverServices(address: string): Promise<string[]>;
   /**
    * Open an RFCOMM socket to `address` on `uuid`. `secure` picks between
    * createRfcommSocketToServiceRecord and its insecure counterpart; the

@@ -74,3 +74,24 @@ describe('sending a message to the bike', () => {
     await expect(bikeService.sendMessage('Anyone there?')).rejects.toThrow(/not connected/i);
   });
 });
+
+describe('inspecting what a dashboard offers', () => {
+  beforeEach(() => {
+    useSettings.setState({demoMode: true});
+    useSession.setState({log: []});
+  });
+
+  it('lists the services, MY RIDE first', async () => {
+    const services = await bikeService.discoverServices('demo-dashboard');
+
+    expect(services[0].isMyRide).toBe(true);
+    expect(services.map(service => service.label)).toContain('Hands-Free');
+  });
+
+  it('records what it found, so the Codes tab shows it', async () => {
+    await bikeService.discoverServices('demo-dashboard');
+
+    const logged = useSession.getState().log.map(line => line.text);
+    expect(logged.some(text => text.includes('offers 3 service(s)'))).toBe(true);
+  });
+});

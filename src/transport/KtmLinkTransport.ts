@@ -75,6 +75,7 @@ export class KtmLinkTransport implements Transport {
         id: device.id,
         name: device.name,
         likelyMatch: BIKE_NAME_HINTS.some(hint => hint.test(device.name)),
+        services: device.uuids,
       }),
     );
   }
@@ -83,7 +84,24 @@ export class KtmLinkTransport implements Transport {
     // Listing bonded devices is a one-shot call; nothing to stop.
   }
 
-  async connect(deviceId: string): Promise<void> {
+  /**
+   * Ask the device which services it offers. Answers the question the connect
+   * error cannot: is the dashboard running MY RIDE at all?
+   */
+  async discoverServices(deviceId: string): Promise<string[]> {
+    await this.ensureReady();
+    try {
+      return await NativeKtmLink!.discoverServices(deviceId);
+    } catch (error) {
+      throw new TransportError(describeError(error), error);
+    }
+  }
+
+  /**
+   * `serviceUuid` defaults to MY RIDE, but any RFCOMM service can be tried —
+   * useful on a dashboard that turns out to publish something else.
+   */
+  async connect(deviceId: string, serviceUuid: string = KTM_SERVICE_UUID): Promise<void> {
     await this.ensureReady();
     await this.disconnect();
 
@@ -98,7 +116,7 @@ export class KtmLinkTransport implements Transport {
     });
 
     try {
-      await NativeKtmLink!.connect(deviceId, KTM_SERVICE_UUID, false);
+      await NativeKtmLink!.connect(deviceId, serviceUuid, false);
     } catch (error) {
       await this.teardownListeners();
       throw new TransportError(describeError(error), error);
@@ -157,7 +175,7 @@ function describeError(error: unknown): string {
     case 'E_BLUETOOTH_OFF':
       return 'Bluetooth is switched off.';
     case 'E_CONNECT':
-      return `${message} Pair the bike in Bluetooth settings first, and make sure MY RIDE is enabled on the dashboard.`;
+      return `${message} The usual cause is that the dashboard is not offering this service — check the services it advertises below.`;
     default:
       return message;
   }

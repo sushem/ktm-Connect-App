@@ -40,7 +40,8 @@ export function ConnectScreen() {
         link="dashboard"
         title="Phone → bike  ·  MY RIDE"
         scanLabel="List paired devices"
-        description="The bike's TFT display. Pair the bike in your phone's Bluetooth settings first — it is not discoverable from here."
+        inspectable
+        description="The bike's TFT display. Pair the bike in your phone's Bluetooth settings first — it is not discoverable from here. MY RIDE is an optional extra on many models: tap a device to see whether yours offers it."
         unavailableReason={
           dashboardSupported
             ? undefined
@@ -61,8 +62,14 @@ export function ConnectScreen() {
           answers; anything it refuses is dropped from the poll loop.
         </Text>
         <Text style={styles.step}>
-          4. For the display link, pair the bike over Bluetooth in the phone's system settings and
-          switch MY RIDE on in the bike's menu, then come back and list paired devices.
+          4. For the display link, pair the bike over Bluetooth in the phone's system settings, then
+          come back and list paired devices. Sitting on the bike's pairing screen is not enough —
+          the phone has to finish bonding, so the bike appears under paired devices.
+        </Text>
+        <Text style={styles.step}>
+          5. If connecting fails, tap "What does this device offer?" under the device. KTM MY RIDE
+          is an optional feature on models like the 390 Adventure and has to be activated by a
+          dealer; without it the dashboard runs no service for this app to talk to.
         </Text>
       </Card>
     </Screen>
