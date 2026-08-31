@@ -6,6 +6,7 @@ import {Card} from '../components/Card';
 import {OptionRow} from '../components/OptionRow';
 import {Screen} from '../components/Screen';
 import {Toggle} from '../components/Toggle';
+import {UpdateCard} from '../components/UpdateCard';
 import {bikeService} from '../services/BikeService';
 import {useSettings} from '../state/settingsStore';
 import {colors, typography} from '../theme';
@@ -109,6 +110,8 @@ export function SettingsScreen() {
           }}
         />
       </Card>
+
+      <UpdateCard />
 
       <Card title="About">
         <Text style={styles.body}>

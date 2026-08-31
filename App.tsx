@@ -8,6 +8,7 @@ import {DisplayScreen} from './src/screens/DisplayScreen';
 import {MessageScreen} from './src/screens/MessageScreen';
 import {RideScreen} from './src/screens/RideScreen';
 import {SettingsScreen} from './src/screens/SettingsScreen';
+import {confirmBoot} from './src/services/updates';
 import {useSession} from './src/state/sessionStore';
 import {useSettings} from './src/state/settingsStore';
 import {colors, spacing, typography} from './src/theme';
@@ -31,6 +32,9 @@ function Shell() {
 
   useEffect(() => {
     void hydrate();
+    // Getting this far means the bundle runs. Until this is said, a freshly
+    // downloaded one is on trial and is discarded if the app keeps failing.
+    void confirmBoot();
   }, [hydrate]);
 
   const active = TABS.find(entry => entry.id === tab) ?? TABS[0];

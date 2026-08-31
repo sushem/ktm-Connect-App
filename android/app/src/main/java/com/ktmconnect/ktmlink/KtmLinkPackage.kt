@@ -5,23 +5,28 @@ import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.module.model.ReactModuleInfo
 import com.facebook.react.module.model.ReactModuleInfoProvider
+import com.ktmconnect.update.BundleUpdateModule
 
+/** Registers this app's own native modules: the dashboard link and the updater. */
 class KtmLinkPackage : BaseReactPackage() {
 
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? =
-    if (name == KtmLinkModule.NAME) KtmLinkModule(reactContext) else null
+    when (name) {
+      KtmLinkModule.NAME -> KtmLinkModule(reactContext)
+      BundleUpdateModule.NAME -> BundleUpdateModule(reactContext)
+      else -> null
+    }
 
   override fun getReactModuleInfoProvider(): ReactModuleInfoProvider = ReactModuleInfoProvider {
-    mapOf(
-      KtmLinkModule.NAME to
-        ReactModuleInfo(
-          KtmLinkModule.NAME,
-          KtmLinkModule.NAME,
-          false, // canOverrideExistingModule
-          false, // needsEagerInit
-          false, // isCxxModule
-          true, // isTurboModule
-        )
-    )
+    listOf(KtmLinkModule.NAME, BundleUpdateModule.NAME).associateWith { name ->
+      ReactModuleInfo(
+        name,
+        name,
+        false, // canOverrideExistingModule
+        false, // needsEagerInit
+        false, // isCxxModule
+        true, // isTurboModule
+      )
+    }
   }
 }

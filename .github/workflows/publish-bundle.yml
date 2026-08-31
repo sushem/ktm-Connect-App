@@ -1,0 +1,105 @@
+name: Publish JS bundle
+
+# Builds the JavaScript bundle and publishes it to GitHub Pages, where the
+# installed app looks for updates. This is the path that does NOT need anyone
+# to reinstall the APK.
+#
+# Requires Pages to be enabled for the repository once, under
+# Settings → Pages → Source: GitHub Actions.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Only the JavaScript matters here. A change under android/ or specs/ is
+      # native, cannot ship this way, and needs a new APK instead.
+      - 'src/**'
+      - 'App.tsx'
+      - 'index.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/publish-bundle.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # A bundle that does not typecheck or pass its tests must never be
+      # published: unlike an APK, nobody has to opt in to installing it.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test -- --ci
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build the bundle
+        run: |
+          mkdir -p site/updates
+          npx react-native bundle \
+            --platform android \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output site/updates/index.android.bundle \
+            --assets-dest site/updates
+
+      # The native API level the app must have to run this bundle. Raise
+      # NATIVE_API_LEVEL in src/services/updates.ts whenever the native modules
+      # change shape; an app older than this is told to update itself instead.
+      - name: Write the manifest
+        run: |
+          VERSION="$(date -u +%Y.%m.%d)-${{ github.run_number }}"
+          HASH="$(sha256sum site/updates/index.android.bundle | cut -d' ' -f1)"
+          NATIVE_API="$(grep -oP 'NATIVE_API_LEVEL = \K[0-9]+' src/services/updates.ts)"
+          BASE="${{ steps.pages.outputs.base_url }}"
+          cat > site/updates/manifest.json <<JSON
+          {
+            "version": "$VERSION",
+            "requiresNativeApi": $NATIVE_API,
+            "notes": "Built from ${{ github.sha }}",
+            "android": {
+              "url": "$BASE/updates/index.android.bundle",
+              "sha256": "$HASH"
+            }
+          }
+          JSON
+          echo "Published $VERSION (native API $NATIVE_API, sha256 $HASH)"
+          cat site/updates/manifest.json
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

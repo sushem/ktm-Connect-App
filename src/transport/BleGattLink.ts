@@ -1,5 +1,5 @@
 import {Platform} from 'react-native';
-import type {Device, Subscription} from 'react-native-ble-plx';
+import {ConnectionPriority, type Device, type Subscription} from 'react-native-ble-plx';
 
 import type {DiscoveredDevice} from '../core/types';
 import type {GattLink} from '../protocol/bccu/BccuClient';
@@ -117,11 +117,22 @@ export class BleGattLink implements GattLink {
 
     let device: Device;
     try {
-      device = await bleManager().connectToDevice(deviceId, {timeout: 20000});
+      device = await bleManager().connectToDevice(deviceId, {
+        timeout: 20000,
+        // The bike is usually already bonded over Bluetooth Classic for music
+        // and calls, and Android can hand back a stale service cache from that
+        // — which hides the dashboard service entirely.
+        refreshGatt: 'OnConnected',
+      });
       // The handshake and the display writes are small, but a larger MTU keeps
       // every frame in a single packet.
       if (Platform.OS === 'android') {
         device = await device.requestMTU(517).catch(() => device);
+        // The handshake has a deadline on the bike's side, and a lazy
+        // connection interval is enough to miss it.
+        await device
+          .requestConnectionPriority(ConnectionPriority.High)
+          .catch(() => undefined);
       }
       device = await device.discoverAllServicesAndCharacteristics();
     } catch (error) {
@@ -169,6 +180,13 @@ export class BleGattLink implements GattLink {
     );
   }
 
+  /**
+   * `indication` is deliberate. The dashboard's own app subscribes to the auth
+   * characteristic with indications, which are acknowledged at the link layer;
+   * the default here would be notifications, which are not. A dashboard that
+   * expects acknowledgements can treat an unacknowledged peer as gone and drop
+   * the link mid-handshake.
+   */
   subscribe(
     service: string,
     characteristic: string,
@@ -186,6 +204,8 @@ export class BleGattLink implements GattLink {
           listener(fromBase64(found.value));
         }
       },
+      undefined,
+      'indication',
     );
     this.subscriptions.push(subscription);
     return () => {

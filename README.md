@@ -72,10 +72,45 @@ by model and year.
 ## Checks
 
 ```bash
-npm test          # 140 unit and integration tests
+npm test          # 161 unit and integration tests
 npm run typecheck
 npm run lint
 ```
+
+## Updating without reinstalling
+
+Everything above the Bluetooth plumbing — both dashboard protocols, the OBD
+client, every screen — is JavaScript, and React Native can load that from a
+downloaded file instead of the copy inside the APK. So a protocol fix reaches a
+rider without a reinstall.
+
+- **Setup → Updates** checks, downloads and stages a new bundle. It takes effect
+  on the next launch.
+- A downloaded bundle is **on trial until it proves it starts.** If the app
+  fails to launch twice, the bundle is discarded and the packaged one comes
+  back, so a bad publish cannot brick the app on a phone.
+- The download is **https-only and checked against a SHA-256** from the
+  manifest before anything is staged.
+- A bundle declares the **native API level** it needs. One that expects native
+  code the installed app does not have is refused with an explanation, rather
+  than loaded and crashed.
+
+Publishing is `.github/workflows/publish-bundle.yml`: on a push to `main` that
+touches JavaScript, it typechecks, tests, builds the bundle and deploys it to
+GitHub Pages with a manifest. Enable Pages once under **Settings → Pages →
+Source: GitHub Actions**.
+
+Android only for now — the updater's native half is not implemented on iOS.
+
+**When a new APK is still required:** anything under `android/` or `specs/` —
+the Bluetooth modules themselves. Raise `NATIVE_API_LEVEL` in
+`src/services/updates.ts` when their shape changes, and older apps will be told
+to update rather than fed a bundle they cannot run.
+
+A residual risk worth naming: integrity rests on the manifest's hash and on
+GitHub Pages serving over https. Anyone who could publish to the Pages site
+could publish a bundle. Signing bundles with a key pinned in the app would close
+that, and is the obvious next step if this is ever used beyond its author.
 
 ## CI
 
@@ -116,6 +151,7 @@ src/
   transport/                  Transport interface, BLE, MY RIDE, demo
   protocol/obd/               ELM327 conversation, PID table, poll loop
   protocol/bccu/              Gen-3: GATT map, crypto, payloads, handshake
+  services/updates.ts         over-the-air bundle updates
   protocol/ktm/               older MY RIDE framing and message bodies
   services/BikeService.ts     owns the radios, keeps the stores in step
   state/                      zustand stores (session, settings)
