@@ -13,6 +13,7 @@ import {canInspectServices, type Transport} from '../transport/types';
 import {useSession} from '../state/sessionStore';
 import {useSettings} from '../state/settingsStore';
 import {estimateGear} from '../utils/gear';
+import {forgetDashboardKeys} from '../state/keyStore';
 
 /**
  * Owns the radios and the two protocol clients, and keeps the stores in step
@@ -54,6 +55,10 @@ class BikeService {
     this.gen3 = new Gen3Dashboard({
       demo,
       onLog: line => useSession.getState().appendLog('dashboard', line),
+      // Pairing takes a while and involves the rider walking to the bike, so
+      // progress goes on the card rather than only into the log.
+      onProgress: message =>
+        useSession.getState().setLink('dashboard', {message: message || undefined}),
       onDisconnect: reason => this.handleDrop('dashboard', reason),
     });
     return this.gen3;
@@ -197,6 +202,25 @@ class BikeService {
       await this.showOnDashboard(notificationView(trimmed));
     }
     useSession.getState().rememberMessage(trimmed);
+  }
+
+  /**
+   * Drop the stored pairing for a bike.
+   *
+   * If the dashboard has forgotten this phone but the app has not, the app
+   * expects a quick resume while the bike wants a full pairing, and the two
+   * never meet. Clearing our side starts again from scratch.
+   */
+  async forgetDashboard(): Promise<void> {
+    const settings = useSettings.getState();
+    const deviceId =
+      useSession.getState().links.dashboard.deviceId ?? settings.lastDashboardDeviceId;
+    if (!deviceId) {
+      throw new Error('No dashboard has been paired yet');
+    }
+    await this.disconnect('dashboard');
+    await forgetDashboardKeys(deviceId);
+    useSession.getState().appendLog('dashboard', `Forgot the pairing for ${deviceId}`);
   }
 
   async restoreDashboard(): Promise<void> {

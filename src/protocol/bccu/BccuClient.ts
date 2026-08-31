@@ -167,6 +167,17 @@ export class BccuClient {
     await this.sendData(REMAINING_DISTANCE, remainingDistancePayload(text));
   }
 
+  /**
+   * Give up on an in-flight handshake — the link went away underneath it.
+   * The caller decides whether to try again.
+   */
+  abort(reason: string): void {
+    this.settle(new Error(reason));
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.reset();
+  }
+
   close(): void {
     this.unsubscribe?.();
     this.unsubscribe = null;

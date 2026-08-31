@@ -1,6 +1,7 @@
 import React from 'react';
 import {Linking, Platform, StyleSheet, Text} from 'react-native';
 
+import {Button} from '../components/Button';
 import {Card} from '../components/Card';
 import {OptionRow} from '../components/OptionRow';
 import {Screen} from '../components/Screen';
@@ -67,6 +68,18 @@ export function SettingsScreen() {
             {value: 'gen3', label: 'Gen-3 (2020 on)'},
             {value: 'legacy', label: 'Older MY RIDE'},
           ]}
+        />
+      </Card>
+
+      <Card
+        title="Pairing"
+        footnote="The app and the dashboard each remember the other. If the bike starts asking to confirm this phone again, or connecting stalls on a bike that used to work, clear this side so both start from scratch.">
+        <Button
+          label="Forget the paired dashboard"
+          variant="secondary"
+          onPress={() => {
+            void bikeService.forgetDashboard().catch(() => {});
+          }}
         />
       </Card>
 

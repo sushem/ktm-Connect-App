@@ -2,6 +2,7 @@ import {NOTIFICATION, NAVIGATION_STATE, TURN_ICON, TURN_ROAD} from '../../protoc
 import {NotificationIcon, TurnIcon, Visibility} from '../../protocol/bccu/payloads';
 import {utf8Decode} from '../../protocol/ktm/framing';
 import {guidanceView, notificationView} from '../../protocol/ktm/messages';
+import {FakeDashboard} from '../../protocol/bccu/FakeDashboard';
 import {Gen3Dashboard} from '../Gen3Dashboard';
 
 /**
@@ -90,4 +91,81 @@ describe('the Gen-3 dashboard link', () => {
     expect(dash.currentView.notificationText).toBe('Following you');
     await dash.disconnect();
   });
+});
+
+/**
+ * A dashboard that drops the link partway through the first handshake, which
+ * is what a real one does around the point it asks the rider to confirm a new
+ * device. Giving up on that first drop is why pairing never completed.
+ */
+class FlakyDashboard extends FakeDashboard {
+  private dropped = false;
+  private onDisconnect?: (reason?: string) => void;
+
+  constructor(private dropsBeforeSucceeding: number) {
+    super();
+  }
+
+  static attempts = 0;
+
+  async connect(deviceId: string, onDisconnect?: (reason?: string) => void): Promise<void> {
+    this.onDisconnect = onDisconnect;
+    await super.connect(deviceId, onDisconnect);
+  }
+
+  subscribe(service: string, characteristic: string, listener: (value: Uint8Array) => void) {
+    const unsubscribe = super.subscribe(service, characteristic, listener);
+    if (this.dropsBeforeSucceeding > 0 && !this.dropped) {
+      this.dropped = true;
+      // Drop shortly after the conversation starts, as the real one does.
+      setTimeout(() => this.onDisconnect?.('The bike disconnected'), 5);
+    }
+    return unsubscribe;
+  }
+}
+
+describe('pairing through the drops a real dashboard causes', () => {
+  it('retries after a mid-handshake drop and completes', async () => {
+    let attempt = 0;
+    const dash = new Gen3Dashboard({
+      cooldownMs: () => 1,
+      createLink: () => {
+        attempt += 1;
+        // The first attempt is dropped; the second goes through, as it does
+        // once the rider has accepted the prompt.
+        return attempt === 1 ? new FlakyDashboard(1) : new FakeDashboard();
+      },
+    });
+
+    await dash.connect('AA:BB:CC');
+
+    expect(dash.isConnected).toBe(true);
+    expect(attempt).toBe(2);
+    await dash.disconnect();
+  }, 20000);
+
+  it('gives up with a readable reason when every attempt is dropped', async () => {
+    const dash = new Gen3Dashboard({
+      cooldownMs: () => 1,
+      createLink: () => new FlakyDashboard(1),
+    });
+
+    await expect(dash.connect('AA:BB:CC')).rejects.toThrow(/after 3 attempts/i);
+  }, 20000);
+
+  it('tells the rider what is happening while it retries', async () => {
+    const progress: string[] = [];
+    let attempt = 0;
+    const dash = new Gen3Dashboard({
+      cooldownMs: () => 1,
+      onProgress: message => progress.push(message),
+      createLink: () => (++attempt === 1 ? new FlakyDashboard(1) : new FakeDashboard()),
+    });
+
+    await dash.connect('AA:BB:CC');
+
+    expect(progress.some(line => /attempt 1 of 3/i.test(line))).toBe(true);
+    expect(progress.some(line => /accept it now/i.test(line))).toBe(true);
+    await dash.disconnect();
+  }, 20000);
 });

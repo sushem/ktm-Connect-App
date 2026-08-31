@@ -71,6 +71,13 @@ export class FakeDashboard implements GattLink {
     return this.activeKey != null;
   }
 
+  /** Present so a simulated dashboard is interchangeable with a real link. */
+  async connect(_deviceId: string, _onDisconnect?: (reason?: string) => void): Promise<void> {}
+
+  async disconnect(): Promise<void> {
+    this.close();
+  }
+
   subscribe(
     _service: string,
     characteristic: string,

@@ -224,6 +224,36 @@ looking for. Likely candidates are marked and sorted up instead.
 Bonded devices are Android-only; iOS does not expose the bond list to apps, so
 there the bike has to be advertising to be found.
 
+### Pairing drops the link, and that is normal
+
+The first handshake with a bike that has not seen this phone before does not
+run start to finish. Observed on a 390 Adventure: the bike sends its nonce, the
+phone answers, and about nine seconds later **the dashboard drops the BLE link**
+— around the point it puts its "add this device" prompt on screen. Nothing is
+wrong; treating that drop as a failure, which is the obvious way to write it, is
+simply a pairing that never completes.
+
+So connecting is a retry loop, not a single attempt:
+
+| | First pairing | Bike already known |
+|---|---|---|
+| Handshake budget | 75 s | 25 s |
+| Cooldown after a drop | 15 s, then 45 s | same |
+| Attempts | 3 | 3 |
+
+The long cooldowns are deliberate. Reconnecting immediately, over and over, is
+suspected of re-triggering the dashboard's prompt, so it is given time to
+finish waking instead. Each attempt builds a **fresh** link — reusing one that
+has already disconnected is a well-known source of connections that then fail
+silently.
+
+A drop *after* authentication is a different thing entirely — the ignition going
+off, or the bike going out of range — and ends the session rather than retrying.
+
+If the dashboard has forgotten this phone but the app still holds a key pool,
+the app expects a quick resume while the bike wants a full pairing and the two
+never meet. **Setup → Forget the paired dashboard** clears our side.
+
 ### Why this one works on iOS
 
 It is ordinary BLE, and Core Bluetooth is open to any app. Only the older
