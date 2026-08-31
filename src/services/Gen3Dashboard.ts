@@ -4,6 +4,7 @@ import {NotificationIcon, Visibility} from '../protocol/bccu/payloads';
 import {toGen3Icon} from '../protocol/bccu/turnIcons';
 import type {DashboardView} from '../protocol/ktm/messages';
 import {BleGattLink} from '../transport/BleGattLink';
+import {listBondedDevices} from '../transport/KtmLinkTransport';
 import type {DiscoveredDevice} from '../core/types';
 import {persistentKeyStore} from '../state/keyStore';
 
@@ -52,6 +53,17 @@ export class Gen3Dashboard {
       onDevice({id: 'demo-gen3', name: 'Demo KTM dashboard', likelyMatch: true});
       return;
     }
+
+    // Bonded devices first. A dashboard that is already connected over
+    // Bluetooth Classic for music and calls frequently stops advertising, so
+    // a scan on its own will not find it — but its address is in the bond
+    // list, and that is all a BLE connection needs.
+    const bonded = await listBondedDevices();
+    bonded.forEach(onDevice);
+    if (bonded.length > 0) {
+      this.log(`${bonded.length} paired device(s) listed; scanning for more`);
+    }
+
     await this.gatt().scan(onDevice);
   }
 

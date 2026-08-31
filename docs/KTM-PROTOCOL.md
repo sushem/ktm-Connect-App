@@ -208,6 +208,22 @@ The implementation is verified against the reference algorithms run through the
 JDK: `src/protocol/bccu/__tests__/crypto.test.ts` asserts byte-exact AES output,
 nonce interleaving, challenge mirroring and all sixteen derived keys.
 
+### Finding the bike
+
+Scanning alone is not enough, and this is the trap that makes a working
+implementation look broken: **a dashboard already connected over Bluetooth
+Classic for music and calls frequently stops advertising over BLE**. It is
+sitting right there, paired, and no BLE scan will see it.
+
+So the device list is built from two sources: the phone's bonded devices first
+(their address is all a BLE connection needs), then whatever is advertising.
+Nothing is filtered out — a dashboard often advertises with no name and without
+declaring its services, so filtering on either hides exactly the device you are
+looking for. Likely candidates are marked and sorted up instead.
+
+Bonded devices are Android-only; iOS does not expose the bond list to apps, so
+there the bike has to be advertising to be found.
+
 ### Why this one works on iOS
 
 It is ordinary BLE, and Core Bluetooth is open to any app. Only the older

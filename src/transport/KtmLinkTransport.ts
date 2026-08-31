@@ -166,6 +166,32 @@ export class KtmLinkTransport implements Transport {
   }
 }
 
+/**
+ * Devices already bonded to this phone.
+ *
+ * Useful beyond the serial link: a dashboard that is connected over Bluetooth
+ * Classic for music and calls often stops advertising over BLE, so a scan
+ * alone will not find it and the bond list is the only way to offer it. Empty
+ * on iOS, which does not expose bonded devices to apps.
+ */
+export async function listBondedDevices(): Promise<DiscoveredDevice[]> {
+  if (Platform.OS !== 'android' || NativeKtmLink == null) {
+    return [];
+  }
+  try {
+    const paired = await NativeKtmLink.getPairedDevices();
+    return paired.map(device => ({
+      id: device.id,
+      name: device.name,
+      likelyMatch: BIKE_NAME_HINTS.some(hint => hint.test(device.name)),
+      services: device.uuids,
+    }));
+  } catch {
+    // Without the Nearby devices permission this throws; a scan may still work.
+    return [];
+  }
+}
+
 function describeError(error: unknown): string {
   const code = (error as {code?: string} | null)?.code;
   const message = (error as {message?: string} | null)?.message ?? 'Unknown Bluetooth error';

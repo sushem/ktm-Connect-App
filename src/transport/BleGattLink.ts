@@ -13,6 +13,31 @@ import {TransportError} from './types';
 const BIKE_NAME_HINTS = [/ktm/i, /husqvarna/i, /gasgas/i, /lc8/i];
 
 /**
+ * Turn one advertisement into a listable device.
+ *
+ * Everything is listed. A dashboard frequently advertises with no name and
+ * without declaring its services, so filtering on either is exactly what hides
+ * the bike; the marker sorts the likely candidates to the top instead.
+ */
+export function describeScanResult(found: {
+  id: string;
+  name?: string | null;
+  localName?: string | null;
+  serviceUUIDs?: string[] | null;
+  rssi?: number | null;
+}): DiscoveredDevice {
+  const name = found.name ?? found.localName ?? '';
+  const advertises = (found.serviceUUIDs ?? []).some(uuid => uuid.toLowerCase() === MAIN_SERVICE);
+  return {
+    id: found.id,
+    name: name || 'Unnamed device',
+    rssi: found.rssi ?? undefined,
+    likelyMatch: advertises || BIKE_NAME_HINTS.some(hint => hint.test(name)),
+    services: advertises ? [MAIN_SERVICE] : undefined,
+  };
+}
+
+/**
  * A GATT connection to a Gen-3 dashboard.
  *
  * Unlike the old serial link this is plain BLE, so it works on both platforms
@@ -73,22 +98,8 @@ export class BleGattLink implements GattLink {
         if (!found || seen.has(found.id)) {
           return;
         }
-        const name = found.name ?? found.localName ?? '';
-        const advertises = (found.serviceUUIDs ?? []).some(
-          uuid => uuid.toLowerCase() === MAIN_SERVICE,
-        );
-        const looksLikeBike = BIKE_NAME_HINTS.some(hint => hint.test(name));
-        if (!advertises && !looksLikeBike) {
-          return;
-        }
         seen.add(found.id);
-        onDevice({
-          id: found.id,
-          name: name || found.id,
-          rssi: found.rssi ?? undefined,
-          likelyMatch: advertises,
-          services: advertises ? [MAIN_SERVICE] : undefined,
-        });
+        onDevice(describeScanResult(found));
       });
     });
   }
@@ -121,7 +132,7 @@ export class BleGattLink implements GattLink {
     if (!services.some(service => service.uuid.toLowerCase() === MAIN_SERVICE)) {
       await device.cancelConnection().catch(() => {});
       throw new TransportError(
-        'This device does not offer the Gen-3 dashboard service. If your bike has an older MY RIDE dashboard, switch the dashboard protocol on the Setup tab.',
+        'This device does not offer the Gen-3 dashboard service. Check the ignition is on, and that you picked the bike rather than a headset — and if the bike is an older model, switch the dashboard protocol on the Setup tab.',
       );
     }
 
