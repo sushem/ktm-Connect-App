@@ -169,3 +169,35 @@ describe('pairing through the drops a real dashboard causes', () => {
     await dash.disconnect();
   }, 20000);
 });
+
+describe('making a message actually appear', () => {
+  it('writes the guidance fields as well as the banner', async () => {
+    const dash = new Gen3Dashboard({demo: true});
+    await dash.connect('demo-gen3');
+
+    await dash.showMessage('Fuel stop next');
+
+    const written = dash.simulated!.writes.map(w => w.characteristic);
+    // The reference's own connect greeting renders through these, so they are
+    // the path known to work on a real dashboard.
+    expect(written).toContain(TURN_ICON);
+    expect(written).toContain(TURN_ROAD);
+    expect(written).toContain(NOTIFICATION);
+
+    const road = dash.simulated!.writes.filter(w => w.characteristic === TURN_ROAD).pop()!;
+    expect(utf8Decode(road.payload.subarray(1))).toBe('Fuel stop next');
+    await dash.disconnect();
+  });
+
+  it('switches guidance on before writing anything, or none of it renders', async () => {
+    const dash = new Gen3Dashboard({demo: true});
+    await dash.connect('demo-gen3');
+    const beforeMessage = dash.simulated!.writes.length;
+
+    await dash.showMessage('Hello');
+
+    const order = dash.simulated!.writes.slice(beforeMessage).map(w => w.characteristic);
+    expect(order[0]).toBe(NAVIGATION_STATE);
+    await dash.disconnect();
+  });
+});

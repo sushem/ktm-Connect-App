@@ -13,6 +13,7 @@ import {
   TURN_ROAD,
   ETA,
   REMAINING_DISTANCE,
+  TBT_NAV_REQUEST,
 } from './uuids';
 import {
   buildControlMessage,
@@ -131,6 +132,24 @@ export class BccuClient {
     await this.sendData(NAVIGATION_STATE, navigationStatePayload(on, gpsIcon));
   }
 
+  /**
+   * Listen on the characteristic the dashboard uses to ask for navigation
+   * data. The reference subscribes to it the moment it authenticates; whether
+   * the dash requires a listener before it will render is not documented, so
+   * we match its behaviour rather than guess.
+   */
+  listenForNavRequests(onRequest?: (data: Uint8Array) => void): void {
+    try {
+      this.link.subscribe(MAIN_SERVICE, TBT_NAV_REQUEST, value => {
+        this.log(`The dashboard asked for navigation data (${value.length} bytes)`);
+        onRequest?.(value);
+      });
+    } catch (error) {
+      // Not every dashboard exposes it; that is not a reason to fail the link.
+      this.log(`Could not listen for navigation requests: ${String(error)}`);
+    }
+  }
+
   async sendNotification(
     text: string,
     icon: NotificationIcon = NotificationIcon.Information,
@@ -147,8 +166,8 @@ export class BccuClient {
     await this.sendData(TURN_ICON, turnIconPayload(icon, visibility));
   }
 
-  async sendTurnDistance(text: string): Promise<void> {
-    await this.sendData(TURN_DISTANCE, turnDistancePayload(text));
+  async sendTurnDistance(text: string, visibility = Visibility.Full): Promise<void> {
+    await this.sendData(TURN_DISTANCE, turnDistancePayload(text, visibility));
   }
 
   async sendTurnRoad(text: string): Promise<void> {

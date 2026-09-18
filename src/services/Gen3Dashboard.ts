@@ -1,6 +1,6 @@
 import {BccuClient, type GattLink} from '../protocol/bccu/BccuClient';
 import {FakeDashboard} from '../protocol/bccu/FakeDashboard';
-import {NotificationIcon, Visibility} from '../protocol/bccu/payloads';
+import {NotificationIcon, TurnIcon, Visibility} from '../protocol/bccu/payloads';
 import {toGen3Icon} from '../protocol/bccu/turnIcons';
 import type {DashboardView} from '../protocol/ktm/messages';
 import {BleGattLink} from '../transport/BleGattLink';
@@ -167,7 +167,12 @@ export class Gen3Dashboard {
     await client.authenticate();
     this.client = client;
 
+    // The order the reference uses once authenticated: listen for the
+    // dashboard's navigation requests, then switch guidance on, without which
+    // it renders nothing at all.
+    client.listenForNavRequests();
     await client.setGuidance(true);
+    this.log('Guidance switched on; the dashboard should now accept content');
     this.connectedDevice =
       (link instanceof BleGattLink ? link.connectedDevice : null) ??
       {id: deviceId, name: this.options.demo ? 'Demo KTM dashboard' : deviceId, likelyMatch: true};
@@ -178,9 +183,25 @@ export class Gen3Dashboard {
     this.connectedDevice = null;
   }
 
-  /** A line of text in the dashboard's notification banner. */
+  /**
+   * Put a line of text on the dashboard.
+   *
+   * Written to the centre guidance view as well as the notification banner.
+   * The reference's own connect greeting uses the guidance fields — a turn
+   * icon plus the road name — and that is the path known to render on a real
+   * dashboard; the banner is what it uses for phone notifications while
+   * navigating, and may not be drawn on its own. Writing both means a message
+   * shows up whichever of the two this dashboard honours.
+   */
   async showMessage(text: string): Promise<void> {
-    await this.require().sendNotification(text, NotificationIcon.Information);
+    const client = this.require();
+
+    await client.setGuidance(true);
+    await client.sendTurnIcon(TurnIcon.Start);
+    await client.sendTurnRoad(text);
+    await client.sendTurnDistance('', Visibility.Off);
+    await client.sendNotification(text, NotificationIcon.Information);
+
     this.view = {...this.view, uiContext: 'default', notificationText: text};
   }
 

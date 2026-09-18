@@ -27,6 +27,9 @@ export const TURN_ROAD = uuid('0707');
 export const ETA = uuid('0708');
 export const REMAINING_DISTANCE = uuid('0709');
 export const NOTIFICATION = uuid('070a');
+/** The dashboard asks for navigation data on this one; the reference subscribes. */
+export const TBT_NAV_REQUEST = uuid('070b');
+export const TBT_NAV_RESPONSE = uuid('070c');
 
 export const BASE_SERVICE = uuid('0000');
 export const BASE_VIN = uuid('0002');
