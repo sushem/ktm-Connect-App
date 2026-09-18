@@ -39,5 +39,6 @@ jest.mock('react-native-ble-plx', () => {
   return {
     BleManager,
     State: {PoweredOn: 'PoweredOn', PoweredOff: 'PoweredOff', Unauthorized: 'Unauthorized', Unsupported: 'Unsupported'},
+    ConnectionPriority: {Balanced: 0, High: 1, LowPower: 2},
   };
 });

@@ -55,7 +55,8 @@ export function DiagnosticsScreen() {
       </Card>
 
       <Card
-        title="Link log"
+        title={`Link log  ·  ${log.length}`}
+        footnote="Newest first. Long-press to select and copy — this is what to send when something does not work."
         accessory={<Button label="Clear" variant="secondary" onPress={clearLog} />}>
         {log.length === 0 ? (
           <Text style={styles.muted}>Nothing logged yet.</Text>
@@ -65,7 +66,8 @@ export function DiagnosticsScreen() {
               .slice()
               .reverse()
               .map((line, index) => (
-                <Text key={`${line.at}-${index}`} style={styles.logLine} numberOfLines={3}>
+                <Text key={`${line.at}-${index}`} style={styles.logLine} selectable>
+                  <Text style={styles.logTime}>{clock(line.at)} </Text>
                   <Text style={styles.logSource}>{line.source}</Text>  {line.text}
                 </Text>
               ))}
@@ -74,6 +76,14 @@ export function DiagnosticsScreen() {
       </Card>
     </Screen>
   );
+}
+
+/** Wall-clock time, so log lines can be lined up against what the bike did. */
+function clock(at: number): string {
+  const d = new Date(at);
+  return [d.getHours(), d.getMinutes(), d.getSeconds()]
+    .map(part => String(part).padStart(2, '0'))
+    .join(':');
 }
 
 const styles = StyleSheet.create({
@@ -90,6 +100,7 @@ const styles = StyleSheet.create({
   },
   codeText: {...typography.body, color: colors.danger, fontWeight: '700'},
   log: {gap: spacing.xs},
-  logLine: {...typography.label, color: colors.textMuted, fontWeight: '500', lineHeight: 17},
+  logLine: {...typography.label, color: colors.textMuted, fontWeight: '500', lineHeight: 16, fontSize: 11},
   logSource: {color: colors.accent},
+  logTime: {color: colors.border},
 });

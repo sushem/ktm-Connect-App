@@ -1,10 +1,12 @@
 import React from 'react';
 import {Linking, Platform, StyleSheet, Text} from 'react-native';
 
+import {Button} from '../components/Button';
 import {Card} from '../components/Card';
 import {OptionRow} from '../components/OptionRow';
 import {Screen} from '../components/Screen';
 import {Toggle} from '../components/Toggle';
+import {UpdateCard} from '../components/UpdateCard';
 import {bikeService} from '../services/BikeService';
 import {useSettings} from '../state/settingsStore';
 import {colors, typography} from '../theme';
@@ -53,7 +55,36 @@ export function SettingsScreen() {
         />
       </Card>
 
-      <Card title="Dashboard">
+      <Card
+        title="Dashboard"
+        footnote="Gen-3 covers the 2020-on bikes, which speak BLE and prompt on the dash to confirm a new phone. Older MY RIDE dashboards use a Bluetooth Classic serial link, which only Android can open.">
+        <OptionRow
+          label="Which dashboard the bike has"
+          value={settings.dashboardProtocol}
+          onChange={dashboardProtocol => {
+            void bikeService.disconnect('dashboard');
+            settings.update({dashboardProtocol});
+          }}
+          options={[
+            {value: 'gen3', label: 'Gen-3 (2020 on)'},
+            {value: 'legacy', label: 'Older MY RIDE'},
+          ]}
+        />
+      </Card>
+
+      <Card
+        title="Pairing"
+        footnote="The app and the dashboard each remember the other. If the bike starts asking to confirm this phone again, or connecting stalls on a bike that used to work, clear this side so both start from scratch.">
+        <Button
+          label="Forget the paired dashboard"
+          variant="secondary"
+          onPress={() => {
+            void bikeService.forgetDashboard().catch(() => {});
+          }}
+        />
+      </Card>
+
+      <Card title="While riding">
         <Toggle
           label="Mirror speed and gear to the bike"
           value={settings.mirrorTelemetryToDashboard}
@@ -61,6 +92,12 @@ export function SettingsScreen() {
             settings.update({mirrorTelemetryToDashboard: value});
             bikeService.syncMirroring();
           }}
+        />
+        <Toggle
+          label="Send the opening frames on connect"
+          hint="Off means the app opens the link and only listens. Useful on a dashboard that does not recognise what we send, to see whether it says anything first."
+          value={settings.sendHandshake}
+          onChange={sendHandshake => settings.update({sendHandshake})}
         />
         <Toggle
           label="Demo mode"
@@ -73,6 +110,8 @@ export function SettingsScreen() {
           }}
         />
       </Card>
+
+      <UpdateCard />
 
       <Card title="About">
         <Text style={styles.body}>

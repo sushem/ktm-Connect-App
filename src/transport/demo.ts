@@ -10,6 +10,13 @@ import type {Transport} from './types';
  * conversation, the framing, the stores, the screens — runs unmodified.
  */
 
+/** MY RIDE, plus the audio profiles a real dashboard also advertises. */
+const DEMO_DASHBOARD_SERVICES = [
+  'cc4c1fb3-482e-4389-bdeb-57b7aac889ae',
+  '0000111e-0000-1000-8000-00805f9b34fb',
+  '0000110b-0000-1000-8000-00805f9b34fb',
+];
+
 abstract class BaseDemoTransport implements Transport {
   abstract readonly id: string;
   protected listeners = new Set<(data: Uint8Array) => void>();
@@ -146,7 +153,27 @@ export class DemoDashboardTransport extends BaseDemoTransport {
   }
 
   protected get demoDevice(): DiscoveredDevice {
-    return {id: 'demo-dashboard', name: 'Demo KTM dashboard', likelyMatch: true};
+    return {
+      id: 'demo-dashboard',
+      name: 'Demo KTM dashboard',
+      likelyMatch: true,
+      services: DEMO_DASHBOARD_SERVICES,
+    };
+  }
+
+  /** A dashboard with MY RIDE activated looks like this over SDP. */
+  async discoverServices(): Promise<string[]> {
+    return DEMO_DASHBOARD_SERVICES;
+  }
+
+  /** Refuse a service this dashboard does not run, as a real one would. */
+  async connect(deviceId: string, serviceUuid?: string): Promise<void> {
+    if (serviceUuid && !DEMO_DASHBOARD_SERVICES.includes(serviceUuid.toLowerCase())) {
+      throw new Error(
+        `read failed, socket might closed or timeout, read ret: -1 (${serviceUuid})`,
+      );
+    }
+    await super.connect(deviceId);
   }
 
   async write(data: Uint8Array): Promise<void> {

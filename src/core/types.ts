@@ -29,6 +29,8 @@ export interface LinkState {
   deviceName?: string;
   /** Human readable detail for the UI: last error, or what we are waiting on. */
   message?: string;
+  /** Which Bluetooth service the link is open on, once it is connected. */
+  service?: string;
   since?: number;
 }
 
@@ -39,6 +41,8 @@ export interface DiscoveredDevice {
   rssi?: number;
   /** True when the device name/advertisement looks like the thing we want. */
   likelyMatch: boolean;
+  /** Service UUIDs the device advertises, where the transport can see them. */
+  services?: string[];
 }
 
 /**

@@ -6,14 +6,20 @@ A React Native app for KTM motorcycles that does two things:
   estimated gear, coolant / oil / intake temperatures, throttle, load, battery
   voltage, fuel level and stored trouble codes, through a Bluetooth LE OBD-II
   adapter on the bike's diagnostic port. Android and iOS.
-- **Writes to the bike's TFT display.** Messages and turn-by-turn guidance over
-  the MY RIDE Bluetooth Classic link, plus an option to mirror speed and gear
-  onto the dash while riding. Android only — [iOS does not let third-party apps
-  open a Bluetooth Classic serial port](docs/KTM-PROTOCOL.md#why-the-display-link-is-android-only).
+- **Writes to the bike's TFT display.** Messages and turn-by-turn guidance, plus
+  an option to mirror speed and gear onto the dash while riding. Two protocols,
+  picked on the Setup tab:
+  - **Gen-3** (roughly 2020 on, including the 390 Adventure) — encrypted BLE.
+    Works on Android and iOS.
+  - **Older MY RIDE** — a Bluetooth Classic serial link, [Android
+    only](docs/KTM-PROTOCOL.md#why-the-older-display-link-is-android-only).
 
-Not affiliated with or endorsed by KTM. The display protocol comes from
-community reverse engineering, not a published specification — see
-[docs/KTM-PROTOCOL.md](docs/KTM-PROTOCOL.md).
+Not affiliated with or endorsed by KTM. Neither display protocol is published
+by KTM; both come from community reverse engineering — see
+[docs/KTM-PROTOCOL.md](docs/KTM-PROTOCOL.md). The Gen-3 GATT layout, payload
+shapes and crypto are taken from the
+[Navigator Gen3](https://github.com/Pavanayi1/KTM-Nav-GEN3) project (MIT), with
+thanks.
 
 ## Screens
 
@@ -21,7 +27,8 @@ community reverse engineering, not a published specification — see
 |---|---|
 | **Ride** | Tachometer with the speed and gear in the middle, tiles for the rest, and running distance / top speed / peak rpm for the session |
 | **Connect** | Scan and connect each link independently; demo mode lives here too |
-| **Display** | Send a message or a turn instruction to the bike, mirror live data, hand the screen back |
+| **Message** | Type a line, hit send, and it appears on the bike's TFT screen — with quick presets, a list of what you sent before, and one tap to hand the screen back |
+| **Nav** | Turn-by-turn instructions on the bike's display, and mirroring of live speed and gear |
 | **Codes** | Read stored trouble codes, and watch the raw conversation on both links |
 | **Setup** | Units, gearing profile for the gear estimate, poll rate |
 
@@ -65,14 +72,75 @@ by model and year.
 ## Checks
 
 ```bash
-npm test          # 75 unit and integration tests
+npm test          # 161 unit and integration tests
 npm run typecheck
 npm run lint
 ```
 
-The JavaScript side is verified here. The Android native module and the iOS
-project have **not** been compiled in this environment — no Android SDK or Xcode
-— so treat the first `npm run android` / `npm run ios` as the real build check.
+## Updating without reinstalling
+
+Everything above the Bluetooth plumbing — both dashboard protocols, the OBD
+client, every screen — is JavaScript, and React Native can load that from a
+downloaded file instead of the copy inside the APK. So a protocol fix reaches a
+rider without a reinstall.
+
+- **Setup → Updates** checks, downloads and stages a new bundle. It takes effect
+  on the next launch.
+- A downloaded bundle is **on trial until it proves it starts.** If the app
+  fails to launch twice, the bundle is discarded and the packaged one comes
+  back, so a bad publish cannot brick the app on a phone.
+- The download is **https-only and checked against a SHA-256** from the
+  manifest before anything is staged.
+- A bundle declares the **native API level** it needs. One that expects native
+  code the installed app does not have is refused with an explanation, rather
+  than loaded and crashed.
+
+Publishing is `.github/workflows/publish-bundle.yml`: on a push to `main` that
+touches JavaScript, it typechecks, tests, builds the bundle and deploys it to
+GitHub Pages with a manifest. Enable Pages once under **Settings → Pages →
+Source: GitHub Actions**.
+
+Android only for now — the updater's native half is not implemented on iOS.
+
+**When a new APK is still required:** anything under `android/` or `specs/` —
+the Bluetooth modules themselves. Raise `NATIVE_API_LEVEL` in
+`src/services/updates.ts` when their shape changes, and older apps will be told
+to update rather than fed a bundle they cannot run.
+
+A residual risk worth naming: integrity rests on the manifest's hash and on
+GitHub Pages serving over https. Anyone who could publish to the Pages site
+could publish a bundle. Signing bundles with a key pinned in the app would close
+that, and is the obvious next step if this is ever used beyond its author.
+
+## CI
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `.github/workflows/ci.yml` | every pull request | typecheck, lint, tests, then `assembleRelease` — which is what proves the native module and its codegen spec still agree — and uploads `KtmConnect.apk` as a build artifact (kept 14 days) |
+| `.github/workflows/ci.yml` | every push to `main` | all of the above, and publishes the APK as a GitHub release tagged `main-<run number>` |
+| `.github/workflows/build-apk.yml` | manual (**Actions → Build APK → Run workflow**) | builds a debug APK, a release APK or both, uploads them as artifacts, and publishes a GitHub release tagged `build-<run number>` |
+
+So every merge to `main` leaves an installable build under
+[Releases](../../releases) with no one having to press anything, and
+`build-apk.yml` stays for cutting one on demand from any commit. The two use
+different tag prefixes because each workflow counts its own run numbers.
+
+To install a build from a pull request instead, open its CI run and download
+**KtmConnect-apk** from the Artifacts section at the bottom of the summary page.
+
+CI builds the *release* variant deliberately. A debug APK leaves the JavaScript
+out and fetches it from Metro when it starts, so installing one on a phone with
+no `npm start` running gives a red "Unable to load script" screen. Debug builds
+are for `npm run android` during development, where Metro is there to serve
+them.
+
+Releases are marked as pre-releases, because the APK is signed with React
+Native's debug keystore: it installs and runs, but is not fit to publish.
+Generate a real keystore and wire it into `android/app/build.gradle` before
+distributing anything.
+
+There is no iOS workflow yet — that comes once the Android side has proven
+itself, since a macOS runner costs about ten times as much per minute.
 
 ## How it is put together
 
@@ -82,7 +150,9 @@ android/…/ktmlink/            its Kotlin implementation (socket + reader threa
 src/
   transport/                  Transport interface, BLE, MY RIDE, demo
   protocol/obd/               ELM327 conversation, PID table, poll loop
-  protocol/ktm/               MY RIDE framing and message bodies
+  protocol/bccu/              Gen-3: GATT map, crypto, payloads, handshake
+  services/updates.ts         over-the-air bundle updates
+  protocol/ktm/               older MY RIDE framing and message bodies
   services/BikeService.ts     owns the radios, keeps the stores in step
   state/                      zustand stores (session, settings)
   screens/, components/       the UI

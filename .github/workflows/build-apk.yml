@@ -1,0 +1,183 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Select APK build type"
+        required: true
+        type: choice
+        options:
+          - debug
+          - release
+          - both
+        default: both
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up the Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # Its default package list includes the obsolete "tools" package,
+          # which Google has removed from the SDK repository — sdkmanager then
+          # exits non-zero and the whole job dies before Gradle starts. We only
+          # need the licences accepted and the SDK on PATH; Gradle fetches the
+          # platform and build-tools it wants by itself.
+          packages: ''
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      # React Native builds run the JavaScript bundler and the TurboModule
+      # codegen from Gradle, so node_modules has to exist first.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build debug APK
+        if: ${{ inputs.build_type == 'debug' || inputs.build_type == 'both' }}
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Build release APK
+        if: ${{ inputs.build_type == 'release' || inputs.build_type == 'both' }}
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Rename debug APK
+        if: ${{ inputs.build_type == 'debug' || inputs.build_type == 'both' }}
+        run: |
+          mv android/app/build/outputs/apk/debug/app-debug.apk \
+             android/app/build/outputs/apk/debug/KtmConnect-debug.apk
+
+      - name: Rename release APK
+        if: ${{ inputs.build_type == 'release' || inputs.build_type == 'both' }}
+        run: |
+          mv android/app/build/outputs/apk/release/app-release.apk \
+             android/app/build/outputs/apk/release/KtmConnect.apk
+
+      - name: Upload debug APK
+        if: ${{ inputs.build_type == 'debug' || inputs.build_type == 'both' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: KtmConnect-debug-apk
+          path: android/app/build/outputs/apk/debug/KtmConnect-debug.apk
+          if-no-files-found: error
+
+      - name: Upload release APK
+        if: ${{ inputs.build_type == 'release' || inputs.build_type == 'both' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: KtmConnect-apk
+          path: android/app/build/outputs/apk/release/KtmConnect.apk
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download debug APK
+        if: ${{ inputs.build_type == 'debug' || inputs.build_type == 'both' }}
+        uses: actions/download-artifact@v7
+        with:
+          name: KtmConnect-debug-apk
+          path: apks
+
+      - name: Download release APK
+        if: ${{ inputs.build_type == 'release' || inputs.build_type == 'both' }}
+        uses: actions/download-artifact@v7
+        with:
+          name: KtmConnect-apk
+          path: apks
+
+      - name: Verify downloaded files
+        run: |
+          echo "Downloaded APKs:"
+          find apks -type f -name "*.apk" -ls
+
+      - name: Create GitHub Release - Debug
+        if: ${{ inputs.build_type == 'debug' }}
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          body: |
+            Automated build from commit ${{ github.sha }}.
+
+            Build type: `debug`
+
+            - `KtmConnect-debug.apk` — for development only
+
+            A debug APK does not contain the JavaScript bundle: it loads it
+            from Metro at launch, so it shows a red screen unless
+            `npm start` is running and reachable from the phone. For a build
+            that runs on its own, use `release`.
+          files: |
+            apks/KtmConnect-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release - Release
+        if: ${{ inputs.build_type == 'release' }}
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          body: |
+            Automated build from commit ${{ github.sha }}.
+
+            Build type: `release`
+
+            - `KtmConnect.apk` — install and run, no computer needed
+
+            Still signed with the debug keystore: set up a real one before
+            publishing anywhere.
+          files: |
+            apks/KtmConnect.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release - Both
+        if: ${{ inputs.build_type == 'both' }}
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          body: |
+            Automated build from commit ${{ github.sha }}.
+
+            Build type: `both`
+
+            - `KtmConnect.apk` — install and run, no computer needed
+            - `KtmConnect-debug.apk` — development only; it loads the
+              JavaScript from Metro at launch, so it needs `npm start`
+              running and reachable from the phone
+
+            Both are signed with the React Native debug keystore: set up a
+            real one before publishing anywhere.
+          files: |
+            apks/KtmConnect-debug.apk
+            apks/KtmConnect.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
