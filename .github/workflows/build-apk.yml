@@ -35,6 +35,13 @@ jobs:
 
       - name: Set up the Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Its default package list includes the obsolete "tools" package,
+          # which Google has removed from the SDK repository — sdkmanager then
+          # exits non-zero and the whole job dies before Gradle starts. We only
+          # need the licences accepted and the SDK on PATH; Gradle fetches the
+          # platform and build-tools it wants by itself.
+          packages: ''
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
